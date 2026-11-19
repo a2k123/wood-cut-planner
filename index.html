@@ -112,6 +112,7 @@
   .toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
   .toolbar .status{font-size:13px;color:var(--muted)}
   .search{font-size:12px}
+  .linkbtn{border:0;background:none;color:var(--accent);font:inherit;font-size:12px;font-weight:600;text-decoration:underline;cursor:pointer;padding:0 0 0 4px}
   .search.busy{color:var(--accent)}
   .search.busy::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:6px;animation:pulse 1s infinite}
   .search.done{color:var(--ok)}
@@ -182,7 +183,7 @@
 
   <section>
     <div class="toolbar">
-      <span class="status"><span id="status"></span><br><span class="search" id="search"></span></span>
+      <span class="status"><span id="status"></span><br><span class="search" id="search"></span> <button class="linkbtn" id="moreBtn" hidden>Search 10 s more</button></span>
       <div class="actions"><button class="btn" id="pdfBtn">Export PDF</button><button class="btn ghost" id="csvBtn">Export CSV</button><button class="btn ghost" id="copyBtn">Copy text</button></div>
     </div>
     <textarea class="copybox" id="copybox" readonly></textarea>
@@ -474,6 +475,7 @@
       for (let t = 0; t < types.length && bins.length < P.preopen; t++)
         while (left[t] > 0 && bins.length < P.preopen) { left[t]--; bins.push(newBin(types[t], P)); }
       if (bins.length < P.preopen) return null;
+      if (P.shuffleBins) for (let i = bins.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [bins[i], bins[j]] = [bins[j], bins[i]]; }
     }
     for (const it of items) {
       let best = null;
@@ -522,14 +524,29 @@
   }
   const better = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] < b[i] - 1e-9) return true; if (a[i] > b[i] + 1e-9) return false; } return false; };
 
+  // smallest number of plates whose usable area could hold all pieces, using the biggest plates first
+  // and respecting how many of each plate you have (ignores shapes, so it is a floor, not a promise)
+  function minPlates(items, types) {
+    let need = items.reduce((s, it) => s + it.pw * it.ph, 0), n = 0;
+    const sorted = types.slice().sort((a, b) => b.uL * b.uW - a.uL * a.uW);
+    for (const t of sorted) {
+      const a = t.uL * t.uW; if (need <= 0) break;
+      const k = Math.min(t.qty, Math.ceil(need / a));
+      n += k; need -= k * a;
+    }
+    return Math.max(1, n);
+  }
+
   const EFFORT_MS = { quick: 400, normal: 3000, thorough: 10000 };
   let solveGen = 0;
 
   // Search: (1) a fixed set of orderings x placement rules, then (2) until the time budget runs out:
   // random reorderings, small changes to the best ordering found so far, and attempts to fit
   // everything on one plate fewer by spreading pieces across a fixed number of plates.
-  async function solve(items, types, opts, onUpdate) {
+  let lastRun = null;
+  async function solve(items, types, opts, onUpdate, seed) {
     const gen = ++solveGen;
+    lastRun = { items, types, opts, onUpdate, best: null };
     const sorts = [
       (a, b) => b.pw * b.ph - a.pw * a.ph,
       (a, b) => Math.max(b.pw, b.ph) - Math.max(a.pw, a.ph) || Math.min(b.pw, b.ph) - Math.min(a.pw, a.ph),
@@ -546,6 +563,9 @@
       } else {
         for (const heur of ['BSSF', 'BLSF', 'BAF', 'BL', 'CP'])
           configs.push({ algo: 'maxrects', heur, binMode, kerf: opts.kerf });
+        // straight-cut layouts are valid here too and sometimes win
+        for (const heur of ['BAF', 'BSSF']) for (const split of ['SLAS', 'MAXAS'])
+          configs.push({ algo: 'guillotine', heur, split, binMode, kerf: opts.kerf });
       }
     }
     const bestModeConfigs = configs.filter(c => c.binMode === 'best');
@@ -559,13 +579,14 @@
     };
 
     // lower bound on plates (area only), used to stop early
-    const maxUsable = Math.max(...types.map(t => t.uL * t.uW));
-    const totalArea = items.reduce((s, it) => s + it.pw * it.ph, 0);
-    const lowerBound = Math.max(1, Math.ceil(totalArea / maxUsable));
+    const lowerBound = minPlates(items, types);
 
     // phase 1 — quick deterministic pass
+    if (seed && seed.order) tryRun(seed.order, seed.P);
     for (const s of sorts) { const order = items.slice().sort(s); for (const P of configs) tryRun(order, P); }
     if (gen !== solveGen) return;
+    const keep = () => { lastRun.best = { order: bestOrder, P: bestP }; };
+    keep();
     onUpdate(best, { done: false, runs, ms: 0, lowerBound });
 
     // phase 2 — improvement within the time budget, in small slices so the page stays responsive
@@ -591,16 +612,28 @@
         if (!atBound && r < 0.35) {
           // try to fit everything on one plate fewer
           const target = best.bins.length - 1;
-          const order = Math.random() < 0.5 ? jitter() : mutate(bestOrder);
-          improved = tryRun(order, { ...pick(bestModeConfigs), preopen: target }) || improved;
+          const r2 = Math.random();
+          let order;
+          if (r2 < 0.5) {
+            // place the pieces from the emptiest plate first, then everything else
+            const emptiest = best.bins.reduce((m, b) => (b.placed.reduce((t, p) => t + p.it.L * p.it.W, 0) / (b.type.L * b.type.W)) < m.f ? { b, f: b.placed.reduce((t, p) => t + p.it.L * p.it.W, 0) / (b.type.L * b.type.W) } : m, { b: null, f: Infinity }).b;
+            const hard = new Set(emptiest.placed.map(p => p.it));
+            const first = [...hard].sort((a, b) => b.pw * b.ph * (0.8 + Math.random() * 0.4) - a.pw * a.ph * (0.8 + Math.random() * 0.4));
+            const rest = (Math.random() < 0.5 ? bestOrder : jitter()).filter(it => !hard.has(it));
+            order = Math.random() < 0.5 ? first.concat(rest) : rest.slice(0, (Math.random() * rest.length * 0.3) | 0).concat(first, rest.slice((Math.random() * rest.length * 0.3) | 0).filter(it => !first.includes(it)));
+            // the second form can drop or duplicate items when the two cut points differ; fall back if so
+            if (order.length !== items.length || new Set(order).size !== items.length) order = first.concat(rest);
+          } else order = r2 < 0.75 ? jitter() : mutate(bestOrder);
+          const fm = Math.random() < 0.3;
+          improved = tryRun(order, { ...pick(fm ? configs : bestModeConfigs), preopen: target, shuffleBins: types.length > 1 && Math.random() < 0.5 }) || improved;
         } else if (r < 0.7) {
           improved = tryRun(mutate(bestOrder), Math.random() < 0.7 ? bestP : pick(configs)) || improved;
         } else {
           improved = tryRun(jitter(), pick(configs)) || improved;
         }
-        if (opts.mode === 'guillotine' && Math.random() < 0.5) {
+        if (Math.random() < (opts.mode === 'guillotine' ? 0.5 : 0.15)) {
           // table-saw layouts depend heavily on which way each leftover is split: explore that too
-          const P = { ...pick(configs), split: 'RAND' };
+          const P = { ...pick(configs.filter(c => c.algo === 'guillotine')), split: 'RAND' };
           if (!atBound && Math.random() < 0.5) P.preopen = best.bins.length - 1, P.binMode = 'best';
           improved = tryRun(Math.random() < 0.6 ? bestOrder : mutate(bestOrder), P) || improved;
         }
@@ -608,12 +641,13 @@
       await new Promise(res => setTimeout(res, 0));
       if (gen !== solveGen) return;
       const now = performance.now();
-      if (improved) onUpdate(best, { done: false, runs, ms: now - t0, lowerBound });
+      if (improved) { keep(); onUpdate(best, { done: false, runs, ms: now - t0, lowerBound }); }
       else if (now - lastReport > 250) { onUpdate(null, { done: false, runs, ms: now - t0, lowerBound }); lastReport = now; }
       // at the theoretical minimum with a good offcut: no need to keep searching for long
       if (best.bins.length <= lowerBound && now - t0 > Math.min(budget, 1200)) break;
     }
     if (gen !== solveGen) return;
+    keep();
     onUpdate(best, { done: true, runs, ms: performance.now() - t0, lowerBound });
   }
 
@@ -647,19 +681,21 @@
     });
 
     const R = $('results');
-    solveGen++; $('search').textContent = ''; $('search').className = 'search';
+    solveGen++; $('search').textContent = ''; $('search').className = 'search'; $('moreBtn').hidden = true;
     if (!types.length) { R.innerHTML = `<div class="card empty">Add at least one plate with a length and width.</div>`; $('status').textContent = ''; lastText = ''; lastRes = null; return; }
     if (!items.length) { R.innerHTML = `<div class="card empty">Add furniture with pieces (and a Build quantity above 0) to see the layout.</div>`; $('status').textContent = ''; lastText = ''; lastRes = null; return; }
     if (items.length > 2000) { R.innerHTML = `<div class="card empty">That's ${items.length} pieces — please keep it under 2000.</div>`; return; }
 
-    solve(items, types, { mode: state.mode, kerf, effort: state.effort }, (res, info) => {
+    solve(items, types, { mode: state.mode, kerf, effort: state.effort }, function onUpdate(res, info) {
       if (res) render(res, types, items, allowance, kerf, trim, furnUsed, info.lowerBound);
       const st = $('search');
       if (info.done) {
+        const atMin = res && res.bins.length <= info.lowerBound;
         st.className = 'search done';
-        st.textContent = `${res && res.bins.length <= info.lowerBound ? 'Minimum possible plates reached' : 'Best layout found'} · ${info.runs.toLocaleString()} layouts tried`;
+        st.textContent = `${atMin ? 'Minimum possible plates reached' : 'Best layout found'} · searched ${(info.ms / 1000).toFixed(1)} s · ${info.runs.toLocaleString()} layouts tried`;
+        $('moreBtn').hidden = atMin;
       } else {
-        st.className = 'search busy';
+        st.className = 'search busy'; $('moreBtn').hidden = true;
         st.textContent = `Optimizing… ${(info.ms / 1000).toFixed(1)} s · ${info.runs.toLocaleString()} layouts tried`;
       }
     });
@@ -1041,6 +1077,11 @@
   }
   function closeModal() { $('modal').hidden = true; $('modalBody').innerHTML = ''; document.body.style.overflow = ''; }
   $('modalClose').onclick = closeModal;
+  $('moreBtn').onclick = () => {
+    if (!lastRun || !lastRun.best) return;
+    const { items, types, opts, onUpdate, best } = lastRun;
+    solve(items, types, { ...opts, effort: 'thorough' }, onUpdate, best);
+  };
   $('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('modal').hidden) closeModal(); });
   function showText(title, text) {
