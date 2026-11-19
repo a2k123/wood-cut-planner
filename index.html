@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wood Cut Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f5f1ea; --card:#fffdf9; --ink:#2b2420; --muted:#7a6f66; --line:#e4dcd0;
+    --accent:#7a4a2a; --accent-soft:#f1e6da; --danger:#b4412f; --ok:#3f7a4a;
+    --plate:#efe4d2; --plate-edge:#b89a78;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  header{padding:22px 20px 6px;max-width:1280px;margin:0 auto}
+  h1{margin:0;font-size:22px;letter-spacing:-.01em}
+  header p{margin:4px 0 0;color:var(--muted);font-size:14px}
+  main{max-width:1280px;margin:0 auto;padding:14px 20px 40px;display:grid;grid-template-columns:minmax(330px,470px) 1fr;gap:18px;align-items:start}
+  @media (max-width:880px){main{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card + .card{margin-top:14px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 10px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+  .rows{display:flex;flex-direction:column;gap:6px}
+  .row{display:grid;gap:6px;align-items:center}
+  .row.plate{grid-template-columns:1fr 50px 50px 46px 42px 60px 26px}
+  @media (max-width:520px){.row.plate{grid-template-columns:1fr 1fr 1fr 1fr 1.3fr 28px}.row.plate>input:first-child{grid-column:1/-1}.row.plate.head span:first-child{display:none}.rows .row.plate{padding-bottom:6px;border-bottom:1px dashed var(--line)}}
+  .row.piece{grid-template-columns:22px 1fr 54px 54px 44px 32px 26px}
+  .use{display:flex;justify-content:center}
+  .use input{width:17px;height:17px;accent-color:var(--ok);cursor:pointer}
+  .row.piece.off .namecell, .row.piece.off > input, .row.piece.off .rot{opacity:.4}
+  .row.piece.off .namecell input{text-decoration:line-through}
+  @media (max-width:520px){.row.piece{grid-template-columns:22px 1fr 1fr 1fr 32px 26px}.row.piece>.namecell{grid-column:2/-1}.row.piece>input[data-k=L],.row.piece .h-L{grid-column-start:2}.row.piece .h-name{display:none}.rows .row.piece{padding-bottom:6px;border-bottom:1px dashed var(--line)}}
+  .row.head{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .row.head span{padding-left:2px}
+  input[type=text],input[type=number],select{width:100%;min-width:0;border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 7px;font:inherit;font-size:14px;color:var(--ink)}
+  input[type=number]{font-family:var(--mono);font-size:13px;-moz-appearance:textfield}
+  input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  input:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  .x{border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;border-radius:6px;height:30px}
+  .x:hover{background:#f3e9e4;color:var(--danger)}
+  .rot{display:flex;justify-content:center}
+  .rot input{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+  .swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+  .namecell{position:relative}
+  .namecell .swatch{position:absolute;left:8px;top:50%;transform:translateY(-50%)}
+  .namecell input{padding-left:24px}
+  .add{margin-top:8px;border:1px dashed var(--plate-edge);background:none;color:var(--accent);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;width:100%}
+  .add:hover{background:var(--accent-soft)}
+  .add.small{width:auto;padding:5px 10px;font-size:12px;margin-top:6px}
+  .furn{border:1px solid var(--line);border-left:4px solid hsl(var(--fh) 40% 55%);border-radius:10px;padding:10px 10px 8px;margin-bottom:10px;background:hsl(var(--fh) 40% 98.5%)}
+  .furn-head{display:grid;grid-template-columns:26px 1fr auto 28px minmax(28px,auto);gap:6px;align-items:center;margin-bottom:8px}
+  .furn.closed .furn-head{margin-bottom:4px}
+  .fname{font-weight:600}
+  .build{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.04em}
+  .build input{width:58px;font-weight:600;text-align:center}
+  .tog{border:0;background:none;cursor:pointer;color:var(--muted);font-size:14px;height:30px;border-radius:6px;transition:transform .15s}
+  .tog:hover{background:var(--accent-soft)}
+  .furn.closed .tog{transform:rotate(-90deg)}
+  .furn.closed .furn-body{display:none}
+  .furn-foot{font-size:12px;color:var(--muted);margin-top:6px}
+  .x.confirm{font-size:11px;color:var(--danger);font-weight:600;width:auto;white-space:nowrap}
+  .furn-legend{margin-top:-4px}
+  .fio{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .fio .btn{flex:1;min-width:150px}
+  .importbar{margin-top:10px;background:var(--accent-soft);border:1px solid #e2cdb7;border-radius:10px;padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:8px}
+  .ib-btns{display:flex;gap:6px;flex-wrap:wrap}
+  .key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;margin-top:8px;align-items:center}
+  .key-h{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+  .key-i{display:inline-flex;align-items:center;gap:5px}
+  .key .num{font-family:var(--mono);font-size:12px}
+  .key .muted{color:var(--muted);font-size:12px}
+  .tag{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;border:1.5px solid;background:#fff;font-style:normal;font-weight:700;font-size:11px}
+  .modal{position:fixed;inset:0;background:rgba(43,36,32,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto;z-index:20}
+  .modal-card{background:var(--card);border-radius:14px;max-width:980px;width:100%;padding:16px 18px 20px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;font-size:17px}
+  .modal-note{color:var(--muted);font-size:13px;margin:6px 0 12px}
+  .modal-page{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:6px;margin-bottom:12px}
+  .modal-text{width:100%;height:50vh;margin-top:10px;font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:8px;padding:8px}
+  .settings{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .settings label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+  .settings .full{grid-column:1/-1}
+  .hint{font-size:12px;color:var(--muted);margin:8px 0 0}
+  .btn{border:0;background:var(--accent);color:#fff;border-radius:8px;padding:8px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .btn.ghost{background:none;color:var(--accent);border:1px solid var(--line)}
+  .btn:hover{filter:brightness(1.08)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+  .stat.price b{color:var(--accent)}
+  @media (max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .stat b{display:block;font-size:24px;font-family:var(--mono);font-weight:600;letter-spacing:-.02em}
+  .stat span{font-size:12px;color:var(--muted)}
+  .stat .minline{display:block;font-style:normal;font-size:12px;color:var(--muted);margin-top:4px;padding-top:4px;border-top:1px dashed var(--line)}
+  .stat .minline.at-min{color:var(--ok);font-weight:600}
+  .warn{background:#fbeee9;border:1px solid #efc9bd;color:#7d2e20;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+  .warn ul{margin:6px 0 0;padding-left:18px}
+  .sheet{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+  .sheet-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .sheet-head h3{margin:0;font-size:16px}
+  .sheet-head .meta{font-size:13px;color:var(--muted);font-family:var(--mono)}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted);margin:0 0 12px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:18px;height:12px;border-radius:2px}
+  .lg.piece{background:hsl(200 55% 72%);border:1px solid hsl(200 35% 42%)}
+  .lg.allow{background:repeating-linear-gradient(45deg,hsl(200 55% 90%) 0 3px,hsl(200 40% 70%) 3px 4.5px);border:1px dashed hsl(200 35% 42%)}
+  .lg.trim{background:repeating-linear-gradient(-45deg,#d9cbb6 0 3px,#a8916f 3px 4.5px);border:1px solid var(--plate-edge)}
+  .lg.off{background:var(--plate);border:1px solid var(--plate-edge)}
+  svg.board{width:100%;height:auto;display:block}
+  svg.board text{font-family:Inter,sans-serif;fill:#2b2420;pointer-events:none}
+  details{margin-top:8px}
+  summary{cursor:pointer;font-size:13px;color:var(--accent);font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  td.num{font-family:var(--mono)}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .toolbar .status{font-size:13px;color:var(--muted)}
+  .search{font-size:12px}
+  .linkbtn{border:0;background:none;color:var(--accent);font:inherit;font-size:12px;font-weight:600;text-decoration:underline;cursor:pointer;padding:0 0 0 4px}
+  .search.busy{color:var(--accent)}
+  .search.busy::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:6px;animation:pulse 1s infinite}
+  .search.done{color:var(--ok)}
+  @keyframes pulse{50%{opacity:.25}}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn[disabled]{opacity:.6;cursor:wait}
+  [hidden]{display:none!important}
+  .empty{color:var(--muted);text-align:center;padding:40px 10px}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+  textarea.copybox{width:100%;height:140px;font-family:var(--mono);font-size:12px;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px;display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Wood Cut Planner</h1>
+  <p>Enter your plates, define each furniture and its pieces, and choose how many of each to build. Each plate loses an edge trim for straightening, each piece gets an allowance added to its length and width, then the pieces are laid out on as few plates as possible. All sizes in cm.</p>
+</header>
+<main>
+  <section>
+    <div class="card">
+      <h2>Plates <span style="text-transform:none;letter-spacing:0;font-weight:400">blank qty = unlimited</span></h2>
+      <div class="row plate head"><span>Name</span><span>Length</span><span>Width</span><span title="Thickness in inches, e.g. 3/4 or 0.75">Thick″</span><span>Qty</span><span title="Price per cubic metre">Price/m³</span><span></span></div>
+      <div class="rows" id="plates"></div>
+      <button class="add" id="addPlate">+ Add plate size</button>
+    </div>
+
+    <div class="card">
+      <h2>Furniture <span style="text-transform:none;letter-spacing:0;font-weight:400">piece sizes before allowance</span></h2>
+      <div id="furniture"></div>
+      <button class="add" id="addFurn">+ Add furniture</button>
+      <div class="fio">
+        <button class="btn ghost" id="importFurn">Import furniture CSV</button>
+        <button class="btn ghost" id="exportFurn">Save furniture as CSV</button>
+        <input type="file" id="furnFile" accept=".csv,text/csv,text/plain" hidden>
+      </div>
+      <div class="importbar" id="importBar" hidden></div>
+      <p class="hint">Set <b>Build</b> to how many of each furniture you want; piece quantities are per one furniture. Uncheck <b>Rot</b> to keep a piece's length along the plate's length (grain direction).</p>
+    </div>
+
+    <div class="card">
+      <h2>Settings</h2>
+      <div class="settings">
+        <label>Allowance added to length & width (cm)<input type="number" id="allowance" step="0.1" min="0" inputmode="decimal"></label>
+        <label>Edge trim lost per plate, length & width (cm)<input type="number" id="trim" step="0.1" min="0" inputmode="decimal"></label>
+        <label>Currency symbol<input type="text" id="currency" maxlength="6" autocomplete="off" placeholder="₪"></label>
+        <label>Saw blade gap / kerf (cm)<input type="number" id="kerf" step="0.1" min="0" inputmode="decimal"></label>
+        <label class="full">Search effort
+          <select id="effort">
+            <option value="quick">Quick (under half a second)</option>
+            <option value="normal">Normal (up to 3 seconds)</option>
+            <option value="thorough">Thorough (up to 10 seconds)</option>
+          </select>
+        </label>
+        <label class="full">Layout style
+          <select id="mode">
+            <option value="free">Tightest fit (any arrangement)</option>
+            <option value="guillotine">Straight through-cuts only (table / panel saw)</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">"Straight through-cuts" guarantees every cut runs edge to edge across the board, which is what a table saw or panel saw needs. It can use slightly more material.</p>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn ghost" id="resetBtn">Load example</button>
+        <button class="btn ghost" id="clearBtn">Clear furniture</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="toolbar">
+      <span class="status"><span id="status"></span><br><span class="search" id="search"></span> <button class="linkbtn" id="moreBtn" hidden>Search 10 s more</button></span>
+      <div class="actions"><button class="btn" id="pdfBtn">Export PDF</button><button class="btn ghost" id="csvBtn">Export CSV</button><button class="btn ghost" id="copyBtn">Copy text</button></div>
+    </div>
+    <textarea class="copybox" id="copybox" readonly></textarea>
+    <div id="results"></div>
+  </section>
+</main>
+<div class="modal" id="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><b id="modalTitle"></b><button class="x" id="modalClose" title="Close">×</button></div>
+    <p class="modal-note" id="modalNote"></p>
+    <div id="modalBody"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  // ---------- state ----------
+  const EXAMPLE = {
+    allowance: 2, trim: 2, kerf: 0, mode: 'free', effort: 'normal', currency: '₪',
+    plates: [{ name: 'Plywood 3/4"', L: 244, W: 122, T: '3/4', qty: '', P: '' }],
+    furniture: [
+      { name: 'Nightstand', qty: 2, open: true, pieces: [
+        { name: 'Top', L: 60, W: 45, qty: 1, rot: true },
+        { name: 'Side', L: 55, W: 40, qty: 2, rot: true },
+        { name: 'Shelf', L: 52, W: 38, qty: 2, rot: true },
+        { name: 'Back', L: 52, W: 50, qty: 1, rot: true },
+        { name: 'Drawer front', L: 48, W: 14, qty: 1, rot: false },
+        { name: 'Drawer side', L: 36, W: 12, qty: 2, rot: true },
+        { name: 'Rail', L: 52, W: 6, qty: 4, rot: true },
+      ] },
+      { name: 'Bookshelf', qty: 1, open: true, pieces: [
+        { name: 'Side', L: 180, W: 30, qty: 2, rot: false },
+        { name: 'Top', L: 80, W: 30, qty: 1, rot: true },
+        { name: 'Shelf', L: 76, W: 28, qty: 4, rot: true },
+        { name: 'Kick', L: 76, W: 8, qty: 1, rot: true },
+      ] },
+    ]
+  };
+  const KEY = 'woodcut-planner-v1';
+  const newPiece = () => ({ name: '', L: '', W: '', qty: 1, rot: true, on: true });
+  let state;
+  try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; }
+  if (state && Array.isArray(state.pieces) && !Array.isArray(state.furniture)) {
+    state.furniture = [{ name: 'Furniture 1', qty: 1, open: true, pieces: state.pieces }];
+    delete state.pieces;
+  }
+  if (!state || !Array.isArray(state.plates) || !Array.isArray(state.furniture)) state = JSON.parse(JSON.stringify(EXAMPLE));
+  if (state.trim === undefined) state.trim = 2;
+  if (!state.effort) state.effort = 'normal';
+  if (state.currency === undefined) state.currency = '₪';
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+  // ---------- colors: one hue per furniture, shades per piece ----------
+  const HUES = [28, 200, 140, 340, 260, 48, 170, 10, 90, 300, 220, 120];
+  const hueOf = fi => HUES[fi % HUES.length];
+  const fillOf = (fi, pi) => `hsl(${hueOf(fi)} ${52 - (pi % 3) * 6}% ${86 - ((pi * 5) % 18)}%)`;
+  const strokeOf = fi => `hsl(${hueOf(fi)} 35% 38%)`;
+
+  // ---------- input UI ----------
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function pieceRow(p, fi, i) {
+    return `
+      <div class="row piece${p.on === false ? ' off' : ''}" data-i="${i}">
+        <div class="use"><input type="checkbox" data-k="on" ${p.on !== false ? 'checked' : ''} title="Place this piece on a plate (untick to leave it out)"></div>
+        <div class="namecell"><span class="swatch" style="background:${fillOf(fi, i)};border:1px solid ${strokeOf(fi)}"></span>
+          <input type="text" dir="auto" data-k="name" value="${esc(p.name)}" placeholder="Piece ${i + 1}"></div>
+        <input type="number" data-k="L" value="${esc(p.L)}" step="0.1" min="0" inputmode="decimal" placeholder="L">
+        <input type="number" data-k="W" value="${esc(p.W)}" step="0.1" min="0" inputmode="decimal" placeholder="W">
+        <input type="number" data-k="qty" value="${esc(p.qty)}" step="1" min="0" inputmode="numeric" placeholder="1">
+        <div class="rot"><input type="checkbox" data-k="rot" ${p.rot ? 'checked' : ''} title="Allow 90° rotation"></div>
+        <button class="x" data-del="piece" title="Remove piece">×</button>
+      </div>`;
+  }
+
+  function furnSummary(f) {
+    const valid = f.pieces.filter(p => num(p.L) > 0 && num(p.W) > 0);
+    const used = valid.filter(p => p.on !== false), off = valid.length - used.length;
+    const per = used.reduce((s, p) => s + (String(p.qty).trim() === '' ? 1 : Math.max(0, Math.floor(num(p.qty)) || 0)), 0);
+    const q = Math.max(0, Math.floor(num(f.qty)) || 0);
+    return `${per} piece${per === 1 ? '' : 's'} per unit · ${per * q} total${off ? ` · ${off} left out` : ''}`;
+  }
+
+  function renderInputs() {
+    $('plates').innerHTML = state.plates.map((p, i) => `
+      <div class="row plate" data-i="${i}">
+        <input type="text" dir="auto" data-k="name" value="${esc(p.name)}" placeholder="Plate ${i + 1}">
+        <input type="number" data-k="L" value="${esc(p.L)}" step="0.1" min="0" inputmode="decimal" placeholder="L">
+        <input type="number" data-k="W" value="${esc(p.W)}" step="0.1" min="0" inputmode="decimal" placeholder="W">
+        <input type="text" data-k="T" value="${esc(p.T ?? '')}" placeholder="3/4" title="Thickness in inches, e.g. 3/4, 1 1/2 or 0.75" autocomplete="off">
+        <input type="number" data-k="qty" value="${esc(p.qty)}" step="1" min="0" inputmode="numeric" placeholder="∞">
+        <input type="number" data-k="P" value="${esc(p.P ?? '')}" step="any" min="0" inputmode="decimal" placeholder="price" title="Price per cubic metre (m³)">
+        <button class="x" data-del="plate" title="Remove">×</button>
+      </div>`).join('');
+    $('furniture').innerHTML = state.furniture.map((f, fi) => `
+      <div class="furn${f.open === false ? ' closed' : ''}" data-f="${fi}" style="--fh:${hueOf(fi)}">
+        <div class="furn-head">
+          <button class="tog" data-ftog title="Show / hide pieces">▾</button>
+          <input type="text" dir="auto" class="fname" data-fk="name" value="${esc(f.name)}" placeholder="Furniture ${fi + 1}">
+          <label class="build">Build<input type="number" data-fk="qty" value="${esc(f.qty)}" step="1" min="0" inputmode="numeric"></label>
+          <button class="x" data-fdup title="Duplicate furniture">⧉</button>
+          <button class="x" data-fdel title="Remove furniture">×</button>
+        </div>
+        <div class="furn-body">
+          <div class="row piece head"><span class="h-use" title="Place this piece on a plate">Use</span><span class="h-name">Piece</span><span class="h-L">Length</span><span>Width</span><span>Qty</span><span title="Allow rotating the piece 90°">Rot</span><span></span></div>
+          <div class="rows">${f.pieces.map((p, i) => pieceRow(p, fi, i)).join('')}</div>
+          <button class="add small" data-addpiece>+ Add piece</button>
+        </div>
+        <div class="furn-foot">${furnSummary(f)}</div>
+      </div>`).join('');
+    $('allowance').value = state.allowance;
+    $('trim').value = state.trim;
+    $('kerf').value = state.kerf;
+    $('mode').value = state.mode;
+    $('effort').value = state.effort;
+    $('currency').value = state.currency;
+  }
+
+  // plates
+  $('plates').addEventListener('input', e => {
+    const row = e.target.closest('.row'); const k = e.target.dataset.k; if (!row || !k) return;
+    state.plates[+row.dataset.i][k] = e.target.value; changed();
+  });
+  $('plates').addEventListener('click', e => {
+    const b = e.target.closest('[data-del]'); if (!b) return;
+    state.plates.splice(+b.closest('.row').dataset.i, 1);
+    if (!state.plates.length) state.plates.push({ name: '', L: '', W: '', T: '', qty: '', P: '' });
+    renderInputs(); changed(true);
+  });
+
+  // furniture
+  const F = $('furniture');
+  F.addEventListener('input', e => {
+    const fEl = e.target.closest('.furn'); if (!fEl) return;
+    const f = state.furniture[+fEl.dataset.f];
+    if (e.target.dataset.fk) { f[e.target.dataset.fk] = e.target.value; }
+    else {
+      const row = e.target.closest('.row'); const k = e.target.dataset.k; if (!row || !k) return;
+      f.pieces[+row.dataset.i][k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+      if (k === 'on') row.classList.toggle('off', !e.target.checked);
+    }
+    fEl.querySelector('.furn-foot').textContent = furnSummary(f);
+    changed();
+  });
+  F.addEventListener('click', e => {
+    const fEl = e.target.closest('.furn'); if (!fEl) return;
+    const fi = +fEl.dataset.f, f = state.furniture[fi];
+    if (e.target.closest('[data-ftog]')) { f.open = f.open === false; fEl.classList.toggle('closed', !f.open); save(); return; }
+    if (e.target.closest('[data-fdel]')) {
+      if (!fEl.dataset.confirm && f.pieces.some(p => p.L || p.W)) {
+        fEl.dataset.confirm = '1'; const b = e.target.closest('[data-fdel]'); b.textContent = 'Delete?'; b.classList.add('confirm');
+        setTimeout(() => { if (b.isConnected) { delete fEl.dataset.confirm; b.textContent = '×'; b.classList.remove('confirm'); } }, 2500);
+        return;
+      }
+      state.furniture.splice(fi, 1); renderInputs(); changed(true); return;
+    }
+    if (e.target.closest('[data-fdup]')) {
+      const copy = JSON.parse(JSON.stringify(f)); copy.name = (f.name || `Furniture ${fi + 1}`) + ' copy';
+      state.furniture.splice(fi + 1, 0, copy); renderInputs(); changed(true); return;
+    }
+    if (e.target.closest('[data-addpiece]')) {
+      f.pieces.push(newPiece()); renderInputs();
+      const rows = F.querySelectorAll(`.furn[data-f="${fi}"] .row.piece:not(.head)`); rows[rows.length - 1]?.querySelector('input[data-k=L]').focus();
+      return;
+    }
+    const del = e.target.closest('[data-del=piece]');
+    if (del) { f.pieces.splice(+del.closest('.row').dataset.i, 1); renderInputs(); changed(true); }
+  });
+
+  $('addPlate').onclick = () => { state.plates.push({ name: '', L: '', W: '', T: '', qty: '', P: '' }); renderInputs(); const r = $('plates').querySelectorAll('.row'); r[r.length - 1].querySelector('input[data-k=L]').focus(); };
+  $('addFurn').onclick = () => {
+    state.furniture.push({ name: '', qty: 1, open: true, pieces: [newPiece()] }); renderInputs();
+    const fs = F.querySelectorAll('.furn'); fs[fs.length - 1].querySelector('.fname').focus();
+  };
+  ['allowance', 'trim', 'kerf', 'mode', 'effort', 'currency'].forEach(id => $(id).addEventListener('input', e => { state[id] = e.target.value; changed(); }));
+  $('resetBtn').onclick = () => { state = JSON.parse(JSON.stringify(EXAMPLE)); renderInputs(); changed(true); };
+  $('clearBtn').onclick = () => { state.furniture = [{ name: '', qty: 1, open: true, pieces: [newPiece()] }]; renderInputs(); changed(true); };
+
+  let timer;
+  function changed(now) { save(); clearTimeout(timer); timer = setTimeout(compute, now ? 0 : 350); }
+
+  // ---------- packing (integer units: 1/100 cm) ----------
+  const U = v => Math.round(parseFloat(v) * 100);
+  const num = v => { const n = parseFloat(v); return isFinite(n) ? n : NaN; };
+  const fmt = u => { const v = u / 100; return (Math.round(v * 10) / 10).toString(); };
+
+  function newBin(type, P) {
+    const W = type.uL + P.kerf, H = type.uW + P.kerf;
+    return { type, W, H, free: [{ x: 0, y: 0, w: W, h: H }], placed: [] };
+  }
+
+  function contact(bin, x, y, w, h) {
+    let s = 0;
+    if (x === 0 || x + w === bin.W) s += h;
+    if (y === 0 || y + h === bin.H) s += w;
+    for (const p of bin.placed) {
+      if (p.x === x + w || p.x + p.w === x) s += Math.max(0, Math.min(p.y + p.h, y + h) - Math.max(p.y, y));
+      if (p.y === y + h || p.y + p.h === y) s += Math.max(0, Math.min(p.x + p.w, x + w) - Math.max(p.x, x));
+    }
+    return s;
+  }
+
+  function score(heur, f, w, h, bin) {
+    const lw = f.w - w, lh = f.h - h;
+    switch (heur) {
+      case 'BSSF': return [Math.min(lw, lh), Math.max(lw, lh)];
+      case 'BLSF': return [Math.max(lw, lh), Math.min(lw, lh)];
+      case 'BAF': return [f.w * f.h - w * h, Math.min(lw, lh)];
+      case 'BL': return [f.y + h, f.x];
+      case 'CP': return [-contact(bin, f.x, f.y, w, h), f.y];
+    }
+  }
+
+  function findPos(bin, it, P) {
+    let best = null;
+    const orients = it.rot && it.pw !== it.ph ? [false, true] : [false];
+    for (let fi = 0; fi < bin.free.length; fi++) {
+      const f = bin.free[fi];
+      for (const r of orients) {
+        const w = r ? it.ph : it.pw, h = r ? it.pw : it.ph;
+        if (w > f.w || h > f.h) continue;
+        const [s1, s2] = score(P.heur, f, w, h, bin);
+        if (!best || s1 < best.s1 || (s1 === best.s1 && s2 < best.s2)) best = { fi, x: f.x, y: f.y, w, h, r, s1, s2 };
+      }
+    }
+    return best;
+  }
+
+  function placeMaxRects(bin, c) {
+    const out = [];
+    for (const f of bin.free) {
+      if (c.x >= f.x + f.w || c.x + c.w <= f.x || c.y >= f.y + f.h || c.y + c.h <= f.y) { out.push(f); continue; }
+      if (c.x > f.x) out.push({ x: f.x, y: f.y, w: c.x - f.x, h: f.h });
+      if (c.x + c.w < f.x + f.w) out.push({ x: c.x + c.w, y: f.y, w: f.x + f.w - c.x - c.w, h: f.h });
+      if (c.y > f.y) out.push({ x: f.x, y: f.y, w: f.w, h: c.y - f.y });
+      if (c.y + c.h < f.y + f.h) out.push({ x: f.x, y: c.y + c.h, w: f.w, h: f.y + f.h - c.y - c.h });
+    }
+    // prune rectangles contained in others
+    const keep = [];
+    for (let i = 0; i < out.length; i++) {
+      const a = out[i]; let contained = false;
+      for (let j = 0; j < out.length; j++) {
+        if (i === j) continue; const b = out[j];
+        if (a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h) {
+          if (a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h && i < j) continue; // keep one duplicate
+          contained = true; break;
+        }
+      }
+      if (!contained) keep.push(a);
+    }
+    bin.free = keep;
+  }
+
+  function placeGuillotine(bin, c, split) {
+    const f = bin.free[c.fi];
+    bin.free.splice(c.fi, 1);
+    const lw = f.w - c.w, lh = f.h - c.h;
+    let horizontal; // true: bottom rect spans full width
+    switch (split) {
+      case 'SLAS': horizontal = lw <= lh; break;
+      case 'LLAS': horizontal = lw > lh; break;
+      case 'MAXAS': horizontal = (f.w * lh) >= (f.h * lw); break;
+      case 'MINAS': horizontal = (f.w * lh) < (f.h * lw); break;
+      case 'RAND': horizontal = Math.random() < 0.5; break;
+    }
+    const add = r => { if (r.w > 0 && r.h > 0) bin.free.push(r); };
+    if (horizontal) {
+      add({ x: f.x, y: f.y + c.h, w: f.w, h: lh });
+      add({ x: f.x + c.w, y: f.y, w: lw, h: c.h });
+    } else {
+      add({ x: f.x + c.w, y: f.y, w: lw, h: f.h });
+      add({ x: f.x, y: f.y + c.h, w: c.w, h: lh });
+    }
+    // (no merging of neighbouring leftovers: joining spaces from different cuts can create layouts
+    //  that need a cut which doesn't run edge to edge, which a table saw can't do)
+    let merged = false;
+    while (merged) {
+      merged = false;
+      outer: for (let i = 0; i < bin.free.length; i++) for (let j = i + 1; j < bin.free.length; j++) {
+        const a = bin.free[i], b = bin.free[j];
+        if (a.x === b.x && a.w === b.w && (a.y + a.h === b.y || b.y + b.h === a.y)) {
+          bin.free[i] = { x: a.x, y: Math.min(a.y, b.y), w: a.w, h: a.h + b.h }; bin.free.splice(j, 1); merged = true; break outer;
+        }
+        if (a.y === b.y && a.h === b.h && (a.x + a.w === b.x || b.x + b.w === a.x)) {
+          bin.free[i] = { x: Math.min(a.x, b.x), y: a.y, w: a.w + b.w, h: a.h }; bin.free.splice(j, 1); merged = true; break outer;
+        }
+      }
+    }
+  }
+
+  function pack(items, types, P) {
+    const bins = [], left = types.map(t => t.qty), unplaced = [];
+    // "preopen": open a fixed set of plates up front and spread pieces across all of them
+    if (P.preopen) {
+      for (let t = 0; t < types.length && bins.length < P.preopen; t++)
+        while (left[t] > 0 && bins.length < P.preopen) { left[t]--; bins.push(newBin(types[t], P)); }
+      if (bins.length < P.preopen) return null;
+      if (P.shuffleBins) for (let i = bins.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [bins[i], bins[j]] = [bins[j], bins[i]]; }
+    }
+    for (const it of items) {
+      let best = null;
+      for (const b of bins) {
+        const c = findPos(b, it, P);
+        if (!c) continue;
+        if (P.binMode === 'first') { best = { b, c }; break; }
+        if (!best || c.s1 < best.c.s1 || (c.s1 === best.c.s1 && c.s2 < best.c.s2)) best = { b, c };
+      }
+      if (!best && !P.preopen) {
+        for (let t = 0; t < types.length; t++) {
+          if (left[t] <= 0) continue;
+          const b = newBin(types[t], P), c = findPos(b, it, P);
+          if (c) { left[t]--; bins.push(b); best = { b, c }; break; }
+        }
+      }
+      if (!best) { unplaced.push(it); if (P.preopen) return { bins, unplaced, failed: true }; continue; }
+      const { b, c } = best;
+      if (P.algo === 'guillotine') placeGuillotine(b, c, P.split); else placeMaxRects(b, c);
+      b.placed.push({ it, x: c.x, y: c.y, w: c.w, h: c.h, r: c.r });
+    }
+    let out = bins.filter(b => b.placed.length);
+    if (P.preopen) {
+      const fill = b => b.placed.reduce((s, p) => s + p.it.L * p.it.W, 0) / (b.type.L * b.type.W);
+      out = out.sort((a, b) => fill(b) - fill(a));
+    }
+    return { bins: out, unplaced };
+  }
+
+  function evaluate(res) {
+    let area = 0, sq = 0;
+    for (const b of res.bins) {
+      const pa = b.type.L * b.type.W; area += pa;
+      const used = b.placed.reduce((s, p) => s + p.it.L * p.it.W, 0);
+      sq += (used / pa) ** 2;
+    }
+    // prefer layouts that leave one large, usable offcut on the last plate
+    let strip = 0;
+    const last = res.bins[res.bins.length - 1];
+    if (last) {
+      let mx = 0, my = 0;
+      for (const p of last.placed) { mx = Math.max(mx, p.x + p.w); my = Math.max(my, p.y + p.h); }
+      strip = Math.min(mx * last.H, my * last.W);
+    }
+    return [res.unplaced.length, area, -Math.round(sq * 1000) / 1000, strip];
+  }
+  const better = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] < b[i] - 1e-9) return true; if (a[i] > b[i] + 1e-9) return false; } return false; };
+
+  // ---- width-aware minimum for narrow boards ----
+  // When every piece can only lie one way on the plate, look along the plate: at any point, the pieces
+  // stacked across the width must fit in the width. The least total plate length that can hold all pieces
+  // that way (a small linear program) gives a floor that knows e.g. two 15 cm pieces can't share a 17 cm board.
+  function lpMinCover(A, D) {
+    // minimise sum(y) subject to A·y >= D, y >= 0  (two-phase simplex, Bland's rule)
+    const n = D.length, m = A[0].length, cols = m + 2 * n, EPS = 1e-9;
+    const T = [], basis = [];
+    for (let i = 0; i < n; i++) {
+      const row = new Float64Array(cols + 1);
+      for (let j = 0; j < m; j++) row[j] = A[i][j];
+      row[m + i] = -1; row[m + n + i] = 1; row[cols] = D[i];
+      T.push(row); basis.push(m + n + i);
+    }
+    const run = (cost, allowed) => {
+      for (let iter = 0; iter < 20000; iter++) {
+        let enter = -1;
+        for (let j = 0; j < cols && enter < 0; j++) {
+          if (!allowed(j)) continue;
+          let rc = cost[j];
+          for (let i = 0; i < n; i++) rc -= cost[basis[i]] * T[i][j];
+          if (rc < -EPS) enter = j;
+        }
+        if (enter < 0) return true;
+        let leave = -1, best = Infinity;
+        for (let i = 0; i < n; i++) {
+          const a = T[i][enter];
+          if (a > EPS) { const r = T[i][cols] / a; if (r < best - EPS || (Math.abs(r - best) <= EPS && basis[i] < basis[leave])) { best = r; leave = i; } }
+        }
+        if (leave < 0) return false; // unbounded (cannot happen here)
+        const pr = T[leave], pv = pr[enter];
+        for (let j = 0; j <= cols; j++) pr[j] /= pv;
+        for (let i = 0; i < n; i++) if (i !== leave) { const f = T[i][enter]; if (f) for (let j = 0; j <= cols; j++) T[i][j] -= f * pr[j]; }
+        basis[leave] = enter;
+      }
+      return false;
+    };
+    const c1 = new Float64Array(cols); for (let i = 0; i < n; i++) c1[m + n + i] = 1;
+    if (!run(c1, () => true)) return 0;
+    const c2 = new Float64Array(cols); for (let j = 0; j < m; j++) c2[j] = 1;
+    if (!run(c2, j => j < m + n)) return 0;
+    let v = 0; for (let i = 0; i < n; i++) if (basis[i] < m) v += T[i][cols];
+    return v;
+  }
+  function stripMin(items, t, kerf) {
+    const BL = t.uL + kerf, BW = t.uW + kerf;
+    const pieces = [];
+    for (const it of items) {
+      const a = it.pw <= BL && it.ph <= BW, b = it.rot && it.ph <= BL && it.pw <= BW;
+      if (a && b && it.pw !== it.ph) return 0;          // piece could lie either way: bound does not apply
+      if (a) pieces.push([it.pw, it.ph]); else if (b) pieces.push([it.ph, it.pw]);
+    }
+    if (!pieces.length) return 0;
+    const along = (lenIdx, cap, run) => {
+      const D = new Map();
+      for (const p of pieces) D.set(p[1 - lenIdx], (D.get(p[1 - lenIdx]) || 0) + p[lenIdx]);
+      const ws = [...D.keys()].sort((x, y) => y - x);
+      if (ws.length > 24) return 0;
+      const pats = [], cur = new Array(ws.length).fill(0), minW = ws[ws.length - 1];
+      let overflow = false;
+      (function rec(i, room) {
+        if (overflow) return;
+        if (i === ws.length) { if (room < minW && cur.some(Boolean)) { pats.push(cur.slice()); if (pats.length > 4000) overflow = true; } return; }
+        for (let k = Math.floor(room / ws[i]); k >= 0; k--) { cur[i] = k; rec(i + 1, room - k * ws[i]); }
+        cur[i] = 0;
+      })(0, cap);
+      if (overflow || !pats.length) return 0;
+      const A = ws.map((_, c) => pats.map(p => p[c]));
+      const need = lpMinCover(A, ws.map(w => D.get(w)));
+      return need > 0 ? Math.ceil(need / run - 1e-7) : 0;
+    };
+    return Math.max(along(0, BW, BL), along(1, BL, BW));
+  }
+
+  // smallest number of plates whose usable area could hold all pieces, using the biggest plates first
+  // and respecting how many of each plate you have (ignores shapes, so it is a floor, not a promise)
+  function minPlates(items, types, kerf = 0) {
+    // pieces that fit no plate at all are reported separately and must not inflate the minimum
+    items = items.filter(it => types.some(t => (it.pw <= t.uL + kerf && it.ph <= t.uW + kerf) || (it.rot && it.ph <= t.uL + kerf && it.pw <= t.uW + kerf)));
+    if (!items.length) return 1;
+    let need = items.reduce((s, it) => s + it.pw * it.ph, 0), n = 0;
+    const sorted = types.slice().sort((a, b) => b.uL * b.uW - a.uL * a.uW);
+    for (const t of sorted) {
+      const a = t.uL * t.uW; if (need <= 0) break;
+      const k = Math.min(t.qty, Math.ceil(need / a));
+      n += k; need -= k * a;
+    }
+    if (types.length === 1) { try { n = Math.max(n, stripMin(items, types[0], kerf)); } catch (e) {} }
+    return Math.max(1, n);
+  }
+
+  const EFFORT_MS = { quick: 400, normal: 3000, thorough: 10000 };
+  let solveGen = 0;
+
+  // Search: (1) a fixed set of orderings x placement rules, then (2) until the time budget runs out:
+  // random reorderings, small changes to the best ordering found so far, and attempts to fit
+  // everything on one plate fewer by spreading pieces across a fixed number of plates.
+  let lastRun = null;
+  async function solve(items, types, opts, onUpdate, seed) {
+    const gen = ++solveGen;
+    lastRun = { items, types, opts, onUpdate, best: null };
+    const sorts = [
+      (a, b) => b.pw * b.ph - a.pw * a.ph,
+      (a, b) => Math.max(b.pw, b.ph) - Math.max(a.pw, a.ph) || Math.min(b.pw, b.ph) - Math.min(a.pw, a.ph),
+      (a, b) => (b.pw + b.ph) - (a.pw + a.ph),
+      (a, b) => b.pw - a.pw || b.ph - a.ph,
+      (a, b) => b.ph - a.ph || b.pw - a.pw,
+      (a, b) => Math.min(b.pw, b.ph) - Math.min(a.pw, a.ph) || Math.max(b.pw, b.ph) - Math.max(a.pw, a.ph),
+    ];
+    const configs = [];
+    for (const binMode of ['first', 'best']) {
+      if (opts.mode === 'guillotine') {
+        for (const heur of ['BAF', 'BSSF', 'BLSF']) for (const split of ['SLAS', 'LLAS', 'MAXAS', 'MINAS'])
+          configs.push({ algo: 'guillotine', heur, split, binMode, kerf: opts.kerf });
+      } else {
+        for (const heur of ['BSSF', 'BLSF', 'BAF', 'BL', 'CP'])
+          configs.push({ algo: 'maxrects', heur, binMode, kerf: opts.kerf });
+        // straight-cut layouts are valid here too and sometimes win
+        for (const heur of ['BAF', 'BSSF']) for (const split of ['SLAS', 'MAXAS'])
+          configs.push({ algo: 'guillotine', heur, split, binMode, kerf: opts.kerf });
+      }
+    }
+    const bestModeConfigs = configs.filter(c => c.binMode === 'best');
+    let best = null, bestScore = null, bestOrder = null, bestP = null, runs = 0;
+    const tryRun = (order, P) => {
+      const res = pack(order, types, P); runs++;
+      if (!res || res.failed) return false;
+      const s = evaluate(res);
+      if (!best || better(s, bestScore)) { best = res; bestScore = s; bestOrder = order; bestP = P; return true; }
+      return false;
+    };
+
+    // lower bound on plates (area only), used to stop early
+    const lowerBound = minPlates(items, types, opts.kerf);
+
+    // phase 1 — quick deterministic pass
+    if (seed && seed.order) tryRun(seed.order, seed.P);
+    for (const s of sorts) { const order = items.slice().sort(s); for (const P of configs) tryRun(order, P); }
+    if (gen !== solveGen) return;
+    const keep = () => { lastRun.best = { order: bestOrder, P: bestP }; };
+    keep();
+    onUpdate(best, { done: false, runs, ms: 0, lowerBound });
+
+    // phase 2 — improvement within the time budget, in small slices so the page stays responsive
+    const budget = EFFORT_MS[opts.effort] || EFFORT_MS.normal;
+    const t0 = performance.now();
+    const jitter = () => items.map(it => [it, it.pw * it.ph * (0.6 + Math.random() * 0.8)]).sort((a, b) => b[1] - a[1]).map(a => a[0]);
+    const mutate = src => {
+      const o = src.slice(), n = o.length; if (n < 2) return o;
+      const r = Math.random(), i = (Math.random() * n) | 0, j = (Math.random() * n) | 0;
+      if (r < 0.45) { const t = o[i]; o[i] = o[j]; o[j] = t; }
+      else if (r < 0.8) { const [x] = o.splice(i, 1); o.splice(j, 0, x); }
+      else { const a = Math.min(i, j), b = Math.max(i, j); const seg = o.slice(a, b + 1).reverse(); o.splice(a, seg.length, ...seg); }
+      return o;
+    };
+    const pick = arr => arr[(Math.random() * arr.length) | 0];
+    let lastReport = t0;
+    while (performance.now() - t0 < budget) {
+      const sliceEnd = performance.now() + 30;
+      let improved = false;
+      while (performance.now() < sliceEnd) {
+        const atBound = best.bins.length <= lowerBound;
+        const r = Math.random();
+        if (!atBound && r < 0.35) {
+          // try to fit everything on one plate fewer
+          const target = best.bins.length - 1;
+          const r2 = Math.random();
+          let order;
+          if (r2 < 0.5) {
+            // place the pieces from the emptiest plate first, then everything else
+            const emptiest = best.bins.reduce((m, b) => (b.placed.reduce((t, p) => t + p.it.L * p.it.W, 0) / (b.type.L * b.type.W)) < m.f ? { b, f: b.placed.reduce((t, p) => t + p.it.L * p.it.W, 0) / (b.type.L * b.type.W) } : m, { b: null, f: Infinity }).b;
+            const hard = new Set(emptiest.placed.map(p => p.it));
+            const first = [...hard].sort((a, b) => b.pw * b.ph * (0.8 + Math.random() * 0.4) - a.pw * a.ph * (0.8 + Math.random() * 0.4));
+            const rest = (Math.random() < 0.5 ? bestOrder : jitter()).filter(it => !hard.has(it));
+            order = Math.random() < 0.5 ? first.concat(rest) : rest.slice(0, (Math.random() * rest.length * 0.3) | 0).concat(first, rest.slice((Math.random() * rest.length * 0.3) | 0).filter(it => !first.includes(it)));
+            // the second form can drop or duplicate items when the two cut points differ; fall back if so
+            if (order.length !== items.length || new Set(order).size !== items.length) order = first.concat(rest);
+          } else order = r2 < 0.75 ? jitter() : mutate(bestOrder);
+          const fm = Math.random() < 0.3;
+          improved = tryRun(order, { ...pick(fm ? configs : bestModeConfigs), preopen: target, shuffleBins: types.length > 1 && Math.random() < 0.5 }) || improved;
+        } else if (r < 0.7) {
+          improved = tryRun(mutate(bestOrder), Math.random() < 0.7 ? bestP : pick(configs)) || improved;
+        } else {
+          improved = tryRun(jitter(), pick(configs)) || improved;
+        }
+        if (Math.random() < (opts.mode === 'guillotine' ? 0.5 : 0.15)) {
+          // table-saw layouts depend heavily on which way each leftover is split: explore that too
+          const P = { ...pick(configs.filter(c => c.algo === 'guillotine')), split: 'RAND' };
+          if (!atBound && Math.random() < 0.5) P.preopen = best.bins.length - 1, P.binMode = 'best';
+          improved = tryRun(Math.random() < 0.6 ? bestOrder : mutate(bestOrder), P) || improved;
+        }
+      }
+      await new Promise(res => setTimeout(res, 0));
+      if (gen !== solveGen) return;
+      const now = performance.now();
+      if (improved) { keep(); onUpdate(best, { done: false, runs, ms: now - t0, lowerBound }); }
+      else if (now - lastReport > 250) { onUpdate(null, { done: false, runs, ms: now - t0, lowerBound }); lastReport = now; }
+      // at the theoretical minimum with a good offcut: no need to keep searching for long
+      if (best.bins.length <= lowerBound && now - t0 > Math.min(budget, 1200)) break;
+    }
+    if (gen !== solveGen) return;
+    keep();
+    onUpdate(best, { done: true, runs, ms: performance.now() - t0, lowerBound });
+  }
+
+  // thickness in inches: accepts 0.75, 3/4, 1 1/2, 1-1/2, 3/4" (returns 0 if empty or unreadable)
+  function inches(v) {
+    let t = String(v ?? '').trim().replace(/["”″]|in(ch(es)?)?$/gi, '').trim().replace(',', '.');
+    if (!t) return 0;
+    let m = t.match(/^(\d+(?:\.\d+)?)\s*(?:[\s-]\s*(\d+)\s*\/\s*(\d+))?$/);
+    if (m) { const whole = parseFloat(m[1]); return m[2] ? whole + (+m[2]) / (+m[3] || 1) : whole; }
+    m = t.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (m && +m[2]) return (+m[1]) / (+m[2]);
+    return 0;
+  }
+  // total area (m²) and volume (m³) of all plates needed; volume needs every used plate's thickness
+  function plateTotals(bins) {
+    let area = 0, vol = 0, missing = false, price = 0, noPrice = false;
+    for (const b of bins) {
+      const a = b.type.L * b.type.W / 1e8;          // 1/100 cm units -> m²
+      area += a;
+      const v = b.type.T > 0 ? a * b.type.T * 0.0254 : 0;   // inches -> metres
+      if (b.type.T > 0) vol += v; else missing = true;
+      if (b.type.T > 0 && isFinite(b.type.P)) price += v * b.type.P; else noPrice = true;
+    }
+    return { area, vol, missing, price, noPrice };
+  }
+  function plateCost(t) { const a = t.L * t.W / 1e8; return t.T > 0 && isFinite(t.P) ? a * t.T * 0.0254 * t.P : NaN; }
+  function money(v) {
+    const c = String(state.currency ?? '').trim();
+    const n = v.toLocaleString('en-US', { minimumFractionDigits: v < 1000 ? 2 : 0, maximumFractionDigits: v < 1000 ? 2 : 0 });
+    return c ? `${c}${n}` : n;
+  }
+  const fmtVol = v => v < 1 ? v.toFixed(3) : v.toFixed(2);
+
+  // ---------- compute & render ----------
+  let lastText = '';
+  function compute() {
+    const allowance = U(num(state.allowance) || 0), kerf = U(num(state.kerf) || 0), trim = U(num(state.trim) || 0);
+    const types = state.plates.map((p, i) => ({
+      i, name: p.name.trim() || `Plate ${i + 1}`, L: U(num(p.L)), W: U(num(p.W)), T: inches(p.T), Tlabel: String(p.T ?? '').trim(), P: num(p.P) >= 0 ? num(p.P) : NaN,
+      qty: String(p.qty).trim() === '' ? Infinity : Math.max(0, Math.floor(num(p.qty)) || 0)
+    })).map(t => ({ ...t, uL: t.L - trim, uW: t.W - trim })).filter(t => t.L > 0 && t.W > 0 && t.uL > 0 && t.uW > 0);
+
+    const items = [], furnUsed = [];
+    state.furniture.forEach((f, fi) => {
+      const fq = Math.max(0, Math.floor(num(f.qty)) || 0);
+      const fname = (f.name || '').trim() || `Furniture ${fi + 1}`;
+      let count = 0;
+      f.pieces.forEach((p, pi) => {
+        const L = num(p.L), W = num(p.W);
+        if (!(L > 0) || !(W > 0) || p.on === false) return;
+        const pq = String(p.qty).trim() === '' ? 1 : Math.max(0, Math.floor(num(p.qty)) || 0);
+        const q = pq * fq;
+        const name = (p.name || '').trim() || `Piece ${pi + 1}`;
+        const cl = U(L) + allowance, cw = U(W) + allowance;
+        for (let k = 0; k < q; k++) {
+          items.push({ fi, pi, key: fi + '-' + pi, fname, k: k + 1, q, name, origL: U(L), origW: U(W), L: cl, W: cw, pw: cl + kerf, ph: cw + kerf, rot: !!p.rot, fill: fillOf(fi, pi), sc: strokeOf(fi) });
+        }
+        count += q;
+      });
+      if (count) furnUsed.push({ fi, fname, fq, count });
+    });
+
+    const R = $('results');
+    solveGen++; $('search').textContent = ''; $('search').className = 'search'; $('moreBtn').hidden = true;
+    if (!types.length) { R.innerHTML = `<div class="card empty">Add at least one plate with a length and width.</div>`; $('status').textContent = ''; lastText = ''; lastRes = null; return; }
+    if (!items.length) { R.innerHTML = `<div class="card empty">Add furniture with pieces (and a Build quantity above 0) to see the layout.</div>`; $('status').textContent = ''; lastText = ''; lastRes = null; return; }
+    if (items.length > 2000) { R.innerHTML = `<div class="card empty">That's ${items.length} pieces — please keep it under 2000.</div>`; return; }
+
+    solve(items, types, { mode: state.mode, kerf, effort: state.effort }, function onUpdate(res, info) {
+      if (res) render(res, types, items, allowance, kerf, trim, furnUsed, info.lowerBound);
+      const st = $('search');
+      if (info.done) {
+        const atMin = res && !res.unplaced.length && res.bins.length <= info.lowerBound;
+        st.className = 'search done';
+        st.textContent = `${atMin ? 'Minimum possible plates reached' : 'Best layout found'} · searched ${(info.ms / 1000).toFixed(1)} s · ${info.runs.toLocaleString()} layouts tried`;
+        $('moreBtn').hidden = atMin;
+      } else {
+        st.className = 'search busy'; $('moreBtn').hidden = true;
+        st.textContent = `Optimizing… ${(info.ms / 1000).toFixed(1)} s · ${info.runs.toLocaleString()} layouts tried`;
+      }
+    });
+  }
+
+  function render(res, types, items, allowance, kerf, trim, furnUsed, lowerBound) {
+    const off = Math.round(trim / 2);
+    const R = $('results');
+    const plateArea = res.bins.reduce((s, b) => s + b.type.L * b.type.W, 0);
+    const usedArea = res.bins.reduce((s, b) => s + b.placed.reduce((t, p) => t + p.it.L * p.it.W, 0), 0);
+    const pct = plateArea ? Math.round(usedArea / plateArea * 100) : 0;
+    const tot = plateTotals(res.bins);
+    const placedN = items.length - res.unplaced.length;
+
+    const perType = {};
+    res.bins.forEach(b => { perType[b.type.i] = (perType[b.type.i] || 0) + 1; });
+    const typeBreak = Object.entries(perType).map(([i, n]) => { const t = types.find(t => t.i == i); return `${n} × ${esc(t.name)} (${fmt(t.L)}×${fmt(t.W)})`; }).join(', ');
+
+    let html = `<div class="stats">
+      <div class="stat"><b>${res.bins.length}</b><span>plate${res.bins.length === 1 ? '' : 's'} needed</span>
+        <em class="minline ${!res.unplaced.length && res.bins.length <= lowerBound ? 'at-min' : ''}" title="No layout can use fewer plates than this. It counts total area and, on narrow boards, which pieces can sit side by side.">Minimum possible: ${lowerBound}${!res.unplaced.length && res.bins.length <= lowerBound ? ' ✓' : ''}</em></div>
+      <div class="stat"><b>${placedN}/${items.length}</b><span>pieces placed</span></div>
+      <div class="stat"><b>${pct}%</b><span>material used</span></div>
+      <div class="stat"><b>${((plateArea - usedArea) / 1e8).toFixed(2)}</b><span>m² offcut</span></div>
+      <div class="stat"><b>${tot.area.toFixed(2)}</b><span>m² total plate area</span></div>
+      <div class="stat"><b>${tot.missing ? '—' : fmtVol(tot.vol)}</b><span>${tot.missing ? 'm³ total volume · add plate thickness (in)' : 'm³ total plate volume'}</span></div>
+      <div class="stat price"><b>${tot.noPrice ? '—' : esc(money(tot.price))}</b><span>${tot.noPrice ? 'total price · add thickness and price per m³ for each plate' : 'total price'}</span></div>
+    </div>`;
+
+    if (res.unplaced.length) {
+      const groups = {};
+      for (const it of res.unplaced) {
+        const fits = types.some(t => (it.L <= t.uL && it.W <= t.uW) || (it.rot && it.W <= t.uL && it.L <= t.uW));
+        const key = it.key;
+        groups[key] = groups[key] || { it, n: 0, fits };
+        groups[key].n++;
+      }
+      html += `<div class="warn"><b>${res.unplaced.length} piece${res.unplaced.length === 1 ? '' : 's'} could not be placed:</b><ul>` +
+        Object.values(groups).map(g => `<li>${g.n} × ${esc(g.it.fname)} – ${esc(g.it.name)} (${fmt(g.it.L)}×${fmt(g.it.W)} with allowance) — ${g.fits ? 'ran out of plates (raise the plate quantity)' : (!g.it.rot && types.some(t => g.it.W <= t.uL && g.it.L <= t.uW) ? 'only fits rotated; tick Rot to allow it' : 'larger than every plate after edge trim')}</li>`).join('') + `</ul></div>`;
+    }
+
+    html += `<div class="legend">
+      <span><i class="lg piece"></i>Piece (real size)</span>
+      <span><i class="lg allow"></i>Allowance +${fmt(allowance)} cm</span>
+      <span><i class="lg trim"></i>Edge trim ${fmt(trim)} cm (lost)</span>
+      <span><i class="lg off"></i>Usable offcut</span>
+    </div><div class="legend furn-legend">` + furnUsed.map(f => `<span><i class="lg" style="background:${fillOf(f.fi, 0)};border:1px solid ${strokeOf(f.fi)}"></i><b style="color:var(--ink);font-weight:600"><bdi>${esc(f.fname)}</bdi></b>&nbsp;× ${f.fq} · ${f.count} pcs</span>`).join('') + `</div>`;
+    const lines = [`CUT LIST — ${res.bins.length} plate(s): ${typeBreak.replace(/&amp;/g, '&')}`, `Building: ${furnUsed.map(f => `${f.fq} × ${f.fname}`).join(', ')}`, `Total plate area ${tot.area.toFixed(2)} m²${tot.missing ? '' : `, total volume ${fmtVol(tot.vol)} m³`}${tot.noPrice ? '' : `, total price ${money(tot.price)}`}`, `Edge trim ${fmt(trim)} cm per plate (usable area shown). Allowance +${fmt(allowance)} cm on length & width${kerf ? `, kerf ${fmt(kerf)} cm` : ''}. Sizes: piece → cut size (L × W, cm). Position = from the plate's top-left corner.`, ''];
+
+    res.bins.forEach((b, bi) => {
+      const used = b.placed.reduce((s, p) => s + p.it.L * p.it.W, 0);
+      const u = Math.round(used / (b.type.L * b.type.W) * 100);
+      html += `<div class="sheet"><div class="sheet-head"><h3>Plate ${bi + 1} · ${esc(b.type.name)}</h3><span class="meta">${fmt(b.type.L)} × ${fmt(b.type.W)} cm${b.type.T ? ` · ${esc(b.type.Tlabel)}″` : ''} (usable ${fmt(b.type.uL)} × ${fmt(b.type.uW)}) · ${b.placed.length} pcs · ${u}% used${isFinite(plateCost(b.type)) ? ` · ${esc(money(plateCost(b.type)))}` : ''}</span></div>`;
+      html += boardSVG(b, bi, off, allowance) + keyHTML(b);
+      const sorted = b.placed.slice().sort((a, c) => a.it.fi - c.it.fi || a.it.pi - c.it.pi || a.it.k - c.it.k);
+      html += `<details><summary>Piece list for plate ${bi + 1}</summary><table><thead><tr><th>Furniture</th><th>Piece</th><th>Piece size</th><th>Cut size (+allowance)</th><th>Position (x, y)</th><th></th></tr></thead><tbody>` +
+        sorted.map(p => `<tr><td>${esc(p.it.fname)}</td><td><span class="swatch" style="background:${p.it.fill};border:1px solid ${p.it.sc}"></span>${esc(p.it.name)}${p.it.q > 1 ? ` <span style="color:var(--muted)">#${p.it.k}</span>` : ''}</td><td class="num">${fmt(p.it.origL)}×${fmt(p.it.origW)}</td><td class="num">${fmt(p.it.L)}×${fmt(p.it.W)}</td><td class="num">${fmt(p.x + off)}, ${fmt(p.y + off)}</td><td>${p.r ? '↻ rotated' : ''}</td></tr>`).join('') +
+        `</tbody></table></details></div>`;
+      lines.push(`Plate ${bi + 1} — ${b.type.name} ${fmt(b.type.L)}×${fmt(b.type.W)}, usable ${fmt(b.type.uL)}×${fmt(b.type.uW)} (${u}% used)`);
+      sorted.forEach(p => lines.push(`  ${p.it.fname} / ${p.it.name}${p.it.q > 1 ? ' #' + p.it.k : ''}: ${fmt(p.it.origL)}×${fmt(p.it.origW)} → cut ${fmt(p.it.L)}×${fmt(p.it.W)} at (${fmt(p.x + off)}, ${fmt(p.y + off)})${p.r ? ' rotated' : ''}`));
+      lines.push('');
+    });
+    if (res.unplaced.length) { lines.push('NOT PLACED:'); res.unplaced.forEach(it => lines.push(`  ${it.fname} / ${it.name}: ${fmt(it.L)}×${fmt(it.W)}`)); }
+    lastText = lines.join('\n');
+    lastRes = { res, types, items, allowance, kerf, trim, furnUsed, lowerBound };
+
+    R.innerHTML = html;
+    $('status').textContent = `${state.mode === 'guillotine' ? 'Straight through-cuts' : 'Tightest fit'} · ${fmt(trim)} cm edge trim · +${fmt(allowance)} cm allowance${kerf ? ` · ${fmt(kerf)} cm kerf` : ''}`;
+    $('copybox').style.display = 'none';
+  }
+
+  function boardSVG(b, bi, off, allowance) {
+    const L = b.type.L, W = b.type.W, M = Math.max(L, W);
+    const key = [], keyMap = new Map(), tags = [], labelCap = M * 0.03;
+    const pad = M * 0.045;
+    const vb = `${-pad} ${-pad} ${L + pad * 1.4} ${W + pad * 1.4}`;
+    const dimFs = M * 0.022;
+    const hs = M * 0.006; // hatch spacing
+    let s = `<svg class="board" viewBox="${vb}" xmlns="http://www.w3.org/2000/svg"><defs>`;
+    s += `<pattern id="trim${bi}" patternUnits="userSpaceOnUse" width="${hs}" height="${hs}" patternTransform="rotate(-45)"><rect width="${hs}" height="${hs}" fill="#dccdb7"/><rect width="${hs * 0.35}" height="${hs}" fill="#a8916f"/></pattern>`;
+    const rows = [...new Set(b.placed.map(p => p.it.fi))];
+    for (const r of rows) {
+      const h = hueOf(r);
+      s += `<pattern id="al${bi}_${r}" patternUnits="userSpaceOnUse" width="${hs}" height="${hs}" patternTransform="rotate(45)"><rect width="${hs}" height="${hs}" fill="hsl(${h} 55% 92%)"/><rect width="${hs * 0.3}" height="${hs}" fill="hsl(${h} 40% 68%)"/></pattern>`;
+    }
+    s += `</defs>`;
+    const sw = M * 0.0015;
+    // full plate with trim band, then usable area on top
+    s += `<rect x="0" y="0" width="${L}" height="${W}" fill="url(#trim${bi})" stroke="#b89a78" stroke-width="${sw * 1.3}"/>`;
+    s += `<rect x="${off}" y="${off}" width="${b.type.uL}" height="${b.type.uW}" fill="#efe4d2" stroke="#a8916f" stroke-width="${sw}" stroke-dasharray="${M * 0.006} ${M * 0.004}"/>`;
+    s += `<text x="${L / 2}" y="${-pad * 0.32}" text-anchor="middle" font-size="${dimFs}" fill="#7a6f66">${fmt(L)} cm</text>`;
+    s += `<text x="${-pad * 0.32}" y="${W / 2}" text-anchor="middle" font-size="${dimFs}" fill="#7a6f66" transform="rotate(-90 ${-pad * 0.32} ${W / 2})">${fmt(W)} cm</text>`;
+    const minFs = M * 0.0105;
+    for (const p of b.placed.slice().sort((a, c) => a.y - c.y || a.x - c.x)) {
+      const x = p.x + off, y = p.y + off;
+      const w = p.r ? p.it.W : p.it.L, h = p.r ? p.it.L : p.it.W;           // cut size on board
+      const nw = p.r ? p.it.origW : p.it.origL, nh = p.r ? p.it.origL : p.it.origW; // real piece
+      const nx = x + (w - nw) / 2, ny = y + (h - nh) / 2;
+      const name = p.it.name + (p.it.q > 1 ? ' #' + p.it.k : '');
+      s += `<g><title>${esc(p.it.fname)} – ${esc(name)}\npiece ${fmt(p.it.origL)}×${fmt(p.it.origW)} cm → cut ${fmt(p.it.L)}×${fmt(p.it.W)} cm${p.r ? ' (rotated)' : ''}\nat ${fmt(x)}, ${fmt(y)}</title>`;
+      // allowance (cut size) — hatched, dashed outline
+      s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#al${bi}_${p.it.fi})" stroke="${p.it.sc}" stroke-width="${sw * 0.8}" stroke-dasharray="${M * 0.004} ${M * 0.003}"/>`;
+      // real piece — solid
+      s += `<rect x="${nx}" y="${ny}" width="${nw}" height="${nh}" fill="${p.it.fill}" stroke="${p.it.sc}" stroke-width="${sw}"/>`;
+      // ---- label: try richer layouts first, in both orientations; fall back to a lettered tag ----
+      const dims = `${fmt(p.it.origL)}×${fmt(p.it.origW)}${p.r ? ' ↻' : ''}`;
+      const cut = `cut ${fmt(p.it.L)}×${fmt(p.it.W)}`;
+      const cx = nx + nw / 2, cy = ny + nh / 2;
+      const layouts = [
+        [[name, 1, 600], [dims, .88, 400], [cut, .7, 400, '#5c524b']],
+        [[name, 1, 600], [dims, .85, 400]],
+        [[name + '  ' + dims, 1, 500]],
+      ];
+      const bonus = [1.35, 1.15, 1];
+      let best = null;
+      for (let li = 0; li < layouts.length; li++) {
+        const lines = layouts[li], em = lines.reduce((t, l) => t + l[1] * 1.2, 0);
+        for (const vert of [false, true]) {
+          const along = vert ? nh : nw, across = vert ? nw : nh;
+          let f = Math.min(across * 0.88 / em, labelCap);
+          for (const l of lines) f = Math.min(f, along * 0.9 / (textW(l[0]) * l[1] * (l[2] >= 600 ? 1.06 : 1)));
+          if (f < minFs) continue;
+          const sc = f * bonus[li] * (vert ? 0.97 : 1);
+          if (!best || sc > best.sc) best = { sc, f, lines, vert, em };
+        }
+      }
+      if (best) {
+        const { f, lines, vert, em } = best;
+        const tr = vert ? ` transform="rotate(-90 ${cx} ${cy})"` : '';
+        let acc = cy - em * f / 2;
+        for (const [t, k, wgt, col] of lines) {
+          const lh = k * 1.2 * f;
+          s += `<text x="${cx}" y="${acc + lh / 2}" dominant-baseline="central" text-anchor="middle" font-size="${f * k}" font-weight="${wgt}"${col ? ` fill="${col}"` : ''}${tr}>${esc(t)}</text>`;
+          acc += lh;
+        }
+      } else {
+        let k = keyMap.get(p.it.key);
+        if (!k) {
+          k = { letter: tagName(key.length), name: p.it.name, n: 0, dims: `${fmt(p.it.origL)}×${fmt(p.it.origW)}`, cut, sc: p.it.sc, fname: p.it.fname };
+          keyMap.set(p.it.key, k); key.push(k);
+        }
+        k.n++;
+        tags.push({ cx, cy, small: Math.min(nw, nh), letter: k.letter, sc: p.it.sc });
+      }
+      s += `</g>`;
+    }
+    // tags drawn last so they stay on top even when bigger than their piece
+    for (const t of tags) {
+      const tf = Math.max(Math.min(t.small * 0.62, labelCap), M * 0.0145), r = tf * 0.78;
+      s += `<g><circle cx="${t.cx}" cy="${t.cy}" r="${r}" fill="#fff" stroke="${t.sc}" stroke-width="${M * 0.0018}"/>`;
+      s += `<text x="${t.cx}" y="${t.cy}" dominant-baseline="central" text-anchor="middle" font-size="${tf}" font-weight="700">${t.letter}</text></g>`;
+    }
+    s += `</svg>`;
+    b._key = key;
+    return s;
+  }
+  const tagName = i => String.fromCharCode(65 + (i % 26)) + (i >= 26 ? Math.floor(i / 26) + 1 : '');
+  let measureCtx = null;
+  // width of a string in em, measured with the real font (handles Hebrew, digits, narrow letters)
+  function textW(t) {
+    if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+    measureCtx.font = `500 100px ${FONT}`;
+    return measureCtx.measureText(t).width / 100;
+  }
+  function keyHTML(b) {
+    if (!b._key || !b._key.length) return '';
+    return `<div class="key"><span class="key-h">Small pieces:</span>` + b._key.map(k =>
+      `<span class="key-i"><i class="tag" style="border-color:${k.sc}">${k.letter}</i><bdi>${esc(k.name)}</bdi>${k.n > 1 ? ` ×${k.n}` : ''} <span class="num">${k.dims}</span> <span class="muted">(${k.cut})</span></span>`).join('') + `</div>`;
+  }
+
+  // ---------- export (PDF + CSV) ----------
+  let lastRes = null, downloads = null;
+  const loadScript = src => new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error('Could not load ' + src)); document.head.appendChild(s); });
+  let jspdfP = null;
+  const getJsPDF = () => jspdfP || (jspdfP = loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js').then(() => window.jspdf.jsPDF).catch(e => { jspdfP = null; throw e; }));
+
+  const PW = 297, PH = 210, PX = 6, MG = 12, CW = PW - 2 * MG;   // A4 landscape, mm; PX = pixels per mm
+  const RTL = /[\u0590-\u05FF\u0600-\u06FF]/;
+  const FONT = 'Inter, "Segoe UI", Arial, sans-serif';
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+  function newPage(st) {
+    const c = document.createElement('canvas'); c.width = PW * PX; c.height = PH * PX;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.scale(PX, PX);
+    st.pages.push({ c, g }); st.g = g; st.y = MG; return g;
+  }
+  function txt(g, s, x, y, o = {}) {
+    s = String(s ?? '');
+    g.font = `${o.weight || 400} ${o.size || 3.2}px ${FONT}`;
+    g.fillStyle = o.color || '#2b2420';
+    const strong = s.match(/[A-Za-z\u0590-\u05FF\u0600-\u06FF]/);
+    g.direction = strong && RTL.test(strong[0]) ? 'rtl' : 'ltr';
+    g.textAlign = o.align || 'left';
+    if (o.maxW && g.measureText(s).width > o.maxW) { while (s.length > 1 && g.measureText(s + '…').width > o.maxW) s = s.slice(0, -1); s += '…'; }
+    g.fillText(s, x, y);
+    return g.measureText(s).width;
+  }
+  function drawTable(st, cols, rows, contTitle) {
+    const rh = 6.4, hh = 7;
+    const xs = []; let acc = MG; for (const c of cols) { xs.push(acc); acc += c.w * CW; }
+    const header = () => {
+      const g = st.g; g.fillStyle = '#f1e6da'; g.fillRect(MG, st.y, CW, hh);
+      cols.forEach((c, i) => txt(g, c.h, c.align === 'right' ? xs[i] + c.w * CW - 2 : xs[i] + 2, st.y + 4.7, { size: 2.7, weight: 600, color: '#7a4a2a', align: c.align || 'left' }));
+      st.y += hh;
+    };
+    if (st.y + hh + rh > PH - MG - 6) { newPage(st); if (contTitle) { txt(st.g, contTitle, MG, MG + 5, { size: 4.2, weight: 600 }); st.y = MG + 10; } }
+    header();
+    rows.forEach((r, ri) => {
+      if (st.y + rh > PH - MG - 6) { newPage(st); if (contTitle) { txt(st.g, contTitle, MG, MG + 5, { size: 4.2, weight: 600 }); st.y = MG + 10; } header(); }
+      const g = st.g;
+      if (ri % 2) { g.fillStyle = '#faf6f0'; g.fillRect(MG, st.y, CW, rh); }
+      r.cells.forEach((cell, i) => {
+        const c = cols[i]; let x = xs[i] + 2; const maxW = c.w * CW - 4;
+        if (c.swatch && r.fill) { g.fillStyle = r.fill; g.strokeStyle = r.sc; g.lineWidth = 0.25; g.fillRect(x, st.y + 1.8, 3, 3); g.strokeRect(x, st.y + 1.8, 3, 3); x += 4.5; }
+        txt(g, cell, c.align === 'right' ? xs[i] + c.w * CW - 2 : x, st.y + 4.4, { size: 3, weight: c.bold ? 600 : 400, align: c.align || 'left', maxW: c.swatch ? maxW - 4.5 : maxW });
+      });
+      g.strokeStyle = '#e4dcd0'; g.lineWidth = 0.2; g.beginPath(); g.moveTo(MG, st.y + rh); g.lineTo(MG + CW, st.y + rh); g.stroke();
+      st.y += rh;
+    });
+    st.y += 4;
+  }
+  function svgImage(svg, wmm, hmm) {
+    const sized = svg.replace('<svg class="board"', `<svg width="${Math.round(wmm * PX * 1.5)}" height="${Math.round(hmm * PX * 1.5)}" font-family="Inter, Arial, sans-serif"`);
+    return new Promise((ok, bad) => {
+      const url = URL.createObjectURL(new Blob([sized], { type: 'image/svg+xml' }));
+      const img = new Image(); img.onload = () => { URL.revokeObjectURL(url); ok(img); }; img.onerror = () => { URL.revokeObjectURL(url); bad(new Error('sketch')); };
+      img.src = url;
+    });
+  }
+  function legend(g, x, y, allowance, trim) {
+    const items = [['#a9cfe6', '#4d7590', 'Piece (real size)'], ['#e3f0f7', '#4d7590', `Allowance +${fmt(allowance)} cm`], ['#cbb898', '#a8916f', `Edge trim ${fmt(trim)} cm (lost)`], ['#efe4d2', '#b89a78', 'Usable offcut']];
+    for (const [f, s, t] of items) { g.fillStyle = f; g.strokeStyle = s; g.lineWidth = 0.25; g.fillRect(x, y - 2.6, 4.5, 3); g.strokeRect(x, y - 2.6, 4.5, 3); x += 6 + txt(g, t, x + 6, y, { size: 2.8, color: '#7a6f66' }) + 6; }
+  }
+  const sizeTxt = (l, w) => `${fmt(l)} × ${fmt(w)}`;
+
+  async function buildPages() {
+    const L = lastRes; if (!L) throw new Error('nothing');
+    const { res, types, items, allowance, kerf, trim, furnUsed } = L;
+    const off = Math.round(trim / 2);
+    try { await document.fonts.ready; } catch (e) {}
+    const st = { pages: [] };
+
+    // --- page 1: summary + full parts list
+    let g = newPage(st);
+    txt(g, 'Cut plan', MG, MG + 7, { size: 8, weight: 700 });
+    txt(g, `${today()} · ${state.mode === 'guillotine' ? 'Straight through-cuts' : 'Tightest fit'} · edge trim ${fmt(trim)} cm · allowance +${fmt(allowance)} cm on length & width${kerf ? ` · kerf ${fmt(kerf)} cm` : ''}`, MG, MG + 13, { size: 3.1, color: '#7a6f66' });
+    const plateArea = res.bins.reduce((s, b) => s + b.type.L * b.type.W, 0);
+    const usedArea = res.bins.reduce((s, b) => s + b.placed.reduce((t, p) => t + p.it.L * p.it.W, 0), 0);
+    const tot = plateTotals(res.bins);
+    const stats = [[String(res.bins.length), `${res.bins.length === 1 ? 'plate needed' : 'plates needed'} · minimum possible: ${L.lowerBound}`], [`${items.length - res.unplaced.length}/${items.length}`, 'pieces placed'], [`${plateArea ? Math.round(usedArea / plateArea * 100) : 0}%`, 'material used'],
+      [((plateArea - usedArea) / 1e8).toFixed(2), 'm² offcut'], [tot.area.toFixed(2), 'm² total plate area'], [tot.missing ? '—' : fmtVol(tot.vol), tot.missing ? 'm³ total volume (plate thickness missing)' : 'm³ total plate volume'],
+      [tot.noPrice ? '—' : money(tot.price), tot.noPrice ? 'total price (thickness or price missing)' : 'total price']];
+    const bw = (CW - 3 * 5) / 4;
+    stats.forEach(([v, l], i) => {
+      const x = MG + (i % 4) * (bw + 5), y = MG + 18 + Math.floor(i / 4) * 20;
+      g.fillStyle = '#fbf8f3'; g.strokeStyle = '#e4dcd0'; g.lineWidth = 0.3; g.fillRect(x, y, bw, 17); g.strokeRect(x, y, bw, 17);
+      txt(g, v, x + 4, y + 9, { size: 6, weight: 700 }); txt(g, l, x + 4, y + 14, { size: 2.8, color: '#7a6f66' });
+    });
+    st.y = MG + 62;
+    const perType = {}; res.bins.forEach(b => { perType[b.type.i] = (perType[b.type.i] || 0) + 1; });
+    txt(g, 'Plates: ' + Object.entries(perType).map(([i, n]) => { const t = types.find(t => t.i == i); return `${n} × ${t.name} (${fmt(t.L)} × ${fmt(t.W)} cm)`; }).join(',  '), MG, st.y, { size: 3.3, maxW: CW }); st.y += 6;
+    txt(g, 'Building: ' + furnUsed.map(f => `${f.fq} × ${f.fname}`).join(',  '), MG, st.y, { size: 3.3, maxW: CW }); st.y += 6;
+    if (res.unplaced.length) {
+      txt(g, `⚠ ${res.unplaced.length} piece(s) could not be placed: ` + [...new Set(res.unplaced.map(it => `${it.fname} – ${it.name}`))].join(', '), MG, st.y, { size: 3.3, color: '#b4412f', weight: 600, maxW: CW }); st.y += 6;
+    }
+    st.y += 3;
+    txt(g, 'Parts list', MG, st.y + 3, { size: 4.6, weight: 600 }); st.y += 7;
+    const groups = new Map();
+    items.forEach(it => { if (!groups.has(it.key)) groups.set(it.key, { it, n: 0, plates: new Set() }); groups.get(it.key).n++; });
+    res.bins.forEach((b, bi) => b.placed.forEach(p => groups.get(p.it.key).plates.add(bi + 1)));
+    const bomRows = [...groups.values()].sort((a, b) => a.it.fi - b.it.fi || a.it.pi - b.it.pi).map(gp => ({
+      fill: gp.it.fill, sc: gp.it.sc,
+      cells: [gp.it.fname, gp.it.name, String(gp.n), sizeTxt(gp.it.origL, gp.it.origW), sizeTxt(gp.it.L, gp.it.W), gp.it.rot ? 'Can rotate' : 'Keep grain', [...gp.plates].sort((a, b) => a - b).join(', ') || '—']
+    }));
+    drawTable(st, [
+      { h: 'Furniture', w: .17, swatch: true }, { h: 'Piece', w: .2, bold: true }, { h: 'Qty', w: .06, align: 'right' },
+      { h: 'Piece size (cm)', w: .14 }, { h: 'Cut size (cm)', w: .14 }, { h: 'Grain', w: .12 }, { h: 'On plate(s)', w: .17 }
+    ], bomRows, 'Parts list (continued)');
+
+    // --- one page per plate: sketch + parts on that plate
+    for (let bi = 0; bi < res.bins.length; bi++) {
+      const b = res.bins[bi];
+      g = newPage(st);
+      const used = b.placed.reduce((s, p) => s + p.it.L * p.it.W, 0);
+      const u = Math.round(used / (b.type.L * b.type.W) * 100);
+      txt(g, `Plate ${bi + 1} of ${res.bins.length} · ${b.type.name}`, MG, MG + 6, { size: 5.4, weight: 700 });
+      txt(g, `${fmt(b.type.L)} × ${fmt(b.type.W)} cm (usable ${fmt(b.type.uL)} × ${fmt(b.type.uW)}) · ${b.placed.length} pieces · ${u}% used`, PW - MG, MG + 6, { size: 3.1, color: '#7a6f66', align: 'right' });
+      legend(g, MG, MG + 12, allowance, trim);
+      const M = Math.max(b.type.L, b.type.W), pad = M * 0.045;
+      const vw = b.type.L + pad * 1.4, vh = b.type.W + pad * 1.4;
+      const maxH = 112, top = MG + 16;
+      const sc = Math.min(CW / vw, maxH / vh), iw = vw * sc, ih = vh * sc;
+      const img = await svgImage(boardSVG(b, 'p' + bi, off, allowance), iw, ih);
+      g.drawImage(img, MG + (CW - iw) / 2, top, iw, ih);
+      st.y = top + ih + 5;
+      if (b._key.length) {
+        let x = MG; let y = st.y + 2;
+        x += txt(g, 'Small pieces:', x, y + 1, { size: 2.8, weight: 600, color: '#7a6f66' }) + 4;
+        for (const k of b._key) {
+          g.font = `400 3px ${FONT}`;
+          const label = `${k.name}${k.n > 1 ? ' ×' + k.n : ''}  ${k.dims} (${k.cut})`;
+          const w = 6 + g.measureText(label).width + 6;
+          if (x + w > MG + CW) { x = MG; y += 6; }
+          g.fillStyle = '#fff'; g.strokeStyle = k.sc; g.lineWidth = 0.35; g.beginPath(); g.arc(x + 2.2, y, 2.2, 0, Math.PI * 2); g.fill(); g.stroke();
+          txt(g, k.letter, x + 2.2, y + 1.05, { size: 2.6, weight: 700, align: 'center' });
+          txt(g, label, x + 5.8, y + 1.05, { size: 3 });
+          x += w;
+        }
+        st.y = y + 7;
+      }
+      const pg = new Map();
+      b.placed.forEach(p => { if (!pg.has(p.it.key)) pg.set(p.it.key, { it: p.it, ks: [], rot: 0 }); const e = pg.get(p.it.key); e.ks.push(p.it.k); if (p.r) e.rot++; });
+      const rows = [...pg.values()].sort((a, b) => a.it.fi - b.it.fi || a.it.pi - b.it.pi).map(e => ({
+        fill: e.it.fill, sc: e.it.sc,
+        cells: [e.it.fname, e.it.name, String(e.ks.length), e.it.q > 1 ? e.ks.sort((a, b) => a - b).map(k => '#' + k).join(' ') : '', sizeTxt(e.it.origL, e.it.origW), sizeTxt(e.it.L, e.it.W), e.rot === 0 ? '' : e.rot === e.ks.length ? 'rotated' : `${e.rot} rotated`]
+      }));
+      drawTable(st, [
+        { h: 'Furniture', w: .17, swatch: true }, { h: 'Piece', w: .17, bold: true }, { h: 'Qty', w: .05, align: 'right' }, { h: 'Numbers', w: .2 },
+        { h: 'Piece size (cm)', w: .13 }, { h: 'Cut size (cm)', w: .13 }, { h: 'Rotation', w: .15 }
+      ], rows, `Plate ${bi + 1} · ${b.type.name} (continued)`);
+    }
+
+    // footers
+    st.pages.forEach((p, i) => {
+      txt(p.g, 'Wood Cut Planner', MG, PH - 6, { size: 2.6, color: '#a39a91' });
+      txt(p.g, `Page ${i + 1} / ${st.pages.length}`, PW - MG, PH - 6, { size: 2.6, color: '#a39a91', align: 'right' });
+    });
+
+    return st.pages;
+  }
+
+  async function buildPDF(pages) {
+    const jsPDF = await getJsPDF();
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+    pages.forEach((p, i) => { if (i) doc.addPage('a4', 'landscape'); doc.addImage(p.c.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, PW, PH); });
+    return doc.output('arraybuffer');
+  }
+
+  function buildCSV() {
+    const { res, trim } = lastRes; const off = Math.round(trim / 2);
+    const q = v => { v = String(v ?? ''); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const out = [['Plate', 'Plate type', 'Thickness (in)', 'Plate price', 'Furniture', 'Piece', 'Number', 'Piece length (cm)', 'Piece width (cm)', 'Cut length (cm)', 'Cut width (cm)', 'X (cm)', 'Y (cm)', 'Rotated']];
+    res.bins.forEach((b, bi) => b.placed.slice().sort((a, c) => a.it.fi - c.it.fi || a.it.pi - c.it.pi || a.it.k - c.it.k).forEach(p => out.push([bi + 1, b.type.name, b.type.Tlabel || '', isFinite(plateCost(b.type)) ? plateCost(b.type).toFixed(2) : '', p.it.fname, p.it.name, p.it.k, fmt(p.it.origL), fmt(p.it.origW), fmt(p.it.L), fmt(p.it.W), fmt(p.x + off), fmt(p.y + off), p.r ? 'yes' : 'no'])));
+    res.unplaced.forEach(it => out.push(['NOT PLACED', '', '', '', it.fname, it.name, it.k, fmt(it.origL), fmt(it.origW), fmt(it.L), fmt(it.W), '', '', '']));
+    return '﻿' + out.map(r => r.map(q).join(',')).join('\r\n');
+  }
+
+  // Where can this page save files?
+  //  1. Inside Claude with the downloads capability -> downloads.save
+  //  2. As a normal website (not inside a frame)     -> ordinary browser download
+  //  3. Otherwise (e.g. a shared Claude view)        -> show the result on screen to save/copy
+  let inFrame = true; try { inFrame = window.self !== window.top; } catch (e) { inFrame = true; }
+  const dlReady = (async () => {
+    if (!inFrame && !window.claude) return;
+    for (let i = 0; i < 30 && !(window.claude && window.claude.use); i++) await new Promise(r => setTimeout(r, 100));
+    try { if (window.claude && window.claude.use) downloads = await window.claude.use('downloads'); } catch (e) { downloads = null; }
+  })();
+
+  function nativeDownload(filename, data) {
+    const mime = filename.endsWith('.pdf') ? 'application/pdf' : 'text/csv;charset=utf-8';
+    const url = URL.createObjectURL(new Blob([data], { type: mime }));
+    const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+
+  // returns true if handed off as a file, false if the caller should show a fallback
+  async function saveFile(filename, data) {
+    await dlReady;
+    if (downloads) {
+      try { await downloads.save({ filename, data }); toast('Saved'); return true; }
+      catch (e) {
+        const code = e && e.code;
+        if (code === 'declined') return true;
+        if (code === 'rate_limited') { toast('Please wait a moment and try again'); return true; }
+        return false;
+      }
+    }
+    if (!inFrame) { nativeDownload(filename, data); return true; }
+    return false;
+  }
+
+  // ---------- on-screen fallback ----------
+  function openModal(title, note, bodyHTML) {
+    $('modalTitle').textContent = title; $('modalNote').textContent = note; $('modalBody').innerHTML = bodyHTML;
+    $('modal').hidden = false; document.body.style.overflow = 'hidden';
+  }
+  function closeModal() { $('modal').hidden = true; $('modalBody').innerHTML = ''; document.body.style.overflow = ''; }
+  $('modalClose').onclick = closeModal;
+  $('moreBtn').onclick = () => {
+    if (!lastRun || !lastRun.best) return;
+    const { items, types, opts, onUpdate, best } = lastRun;
+    solve(items, types, { ...opts, effort: 'thorough' }, onUpdate, best);
+  };
+  $('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('modal').hidden) closeModal(); });
+  function showText(title, text) {
+    const clean = text.replace(/^﻿/, '');
+    openModal(title, 'File downloads aren’t allowed in this view. Copy the text below and paste it into a file saved as .csv (it opens in Excel and Google Sheets).',
+      `<button class="btn" id="modalCopy">Copy to clipboard</button><textarea class="modal-text" readonly></textarea>`);
+    const ta = $('modalBody').querySelector('textarea'); ta.value = clean;
+    $('modalCopy').onclick = async () => {
+      try { await navigator.clipboard.writeText(clean); toast('Copied'); }
+      catch (e) { ta.focus(); ta.select(); toast('Select the text and copy it'); }
+    };
+  }
+
+  $('pdfBtn').onclick = async () => {
+    if (!lastRes) { toast('Nothing to export yet'); return; }
+    const b = $('pdfBtn'), t = b.textContent; b.disabled = true; b.textContent = 'Building PDF…';
+    try {
+      const pages = await buildPages();
+      await dlReady;
+      let done = false;
+      if (downloads || !inFrame) done = await saveFile(`cut-plan-${today()}.pdf`, await buildPDF(pages));
+      if (!done) {
+        openModal('Cut plan', 'File downloads aren’t allowed in this view, so here are the pages as pictures. Press and hold a page (phone) or right-click it (computer) to save it.',
+          pages.map((p, i) => `<img class="modal-page" alt="Page ${i + 1}" src="${p.c.toDataURL('image/jpeg', 0.88)}">`).join(''));
+      }
+    } catch (e) { console.error(e); toast('Could not build the PDF'); }
+    finally { b.disabled = false; b.textContent = t; }
+  };
+  $('csvBtn').onclick = async () => {
+    if (!lastRes) { toast('Nothing to export yet'); return; }
+    const csv = buildCSV();
+    if (!(await saveFile(`cut-list-${today()}.csv`, csv))) showText('Cut list (CSV)', csv);
+  };
+
+  // ---------- furniture CSV save / load ----------
+  const FCOLS = ['Furniture', 'Build', 'Piece', 'Length (cm)', 'Width (cm)', 'Qty', 'Can rotate', 'Include'];
+  function furnitureCSV() {
+    const q = v => { v = String(v ?? ''); return /[",;\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const rows = [FCOLS];
+    state.furniture.forEach((f, fi) => {
+      const fname = (f.name || '').trim() || `Furniture ${fi + 1}`;
+      const pcs = f.pieces.filter(p => String(p.name).trim() || String(p.L).trim() || String(p.W).trim());
+      if (!pcs.length) rows.push([fname, f.qty, '', '', '', '', '', '']);
+      pcs.forEach(p => rows.push([fname, f.qty, p.name, p.L, p.W, p.qty, p.rot ? 'yes' : 'no', p.on === false ? 'no' : 'yes']));
+    });
+    return '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n');
+  }
+  function parseCSV(text) {
+    text = text.replace(/^﻿/, '');
+    const first = text.split(/\r?\n/)[0] || '';
+    const delim = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ';' : (first.includes('\t') && !first.includes(',') ? '\t' : ',');
+    const rows = []; let row = [], cell = '', inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQ) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else inQ = false; } else cell += ch; continue; }
+      if (ch === '"') inQ = true;
+      else if (ch === delim) { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+      else cell += ch;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter(r => r.some(c => c.trim() !== ''));
+  }
+  function furnitureFromCSV(text) {
+    const rows = parseCSV(text);
+    if (!rows.length) throw new Error('The file is empty.');
+    const h = rows[0].map(c => c.trim().toLowerCase());
+    const find = (...keys) => h.findIndex(c => keys.some(k => c.includes(k)));
+    let idx = { f: find('furniture', 'רהיט'), b: find('build', 'כמות רהיט'), p: find('piece', 'part', 'חלק'), L: find('length', 'אורך'), W: find('width', 'רוחב'), q: find('qty', 'quantity', 'כמות'), r: find('rot', 'סיבוב'), u: find('include', 'כלול', 'לכלול') };
+    let body = rows.slice(1);
+    if (idx.f < 0 || idx.L < 0 || idx.W < 0) { idx = { f: 0, b: 1, p: 2, L: 3, W: 4, q: 5, r: 6, u: 7 }; body = rows; } // no header: assume column order
+    if (idx.q === idx.b) idx.q = h.findIndex((c, i) => i !== idx.b && (c.includes('qty') || c.includes('כמות')));
+    const get = (r, i) => (i >= 0 && i < r.length ? r[i].trim() : '');
+    const yes = v => !/^(no|n|false|0|לא|keep|keep grain)$/i.test(v.trim());
+    const out = [], byName = new Map();
+    for (const r of body) {
+      const fname = get(r, idx.f) || 'Furniture';
+      let f = byName.get(fname);
+      if (!f) { f = { name: fname, qty: get(r, idx.b) || 1, open: false, pieces: [] }; byName.set(fname, f); out.push(f); }
+      const L = get(r, idx.L).replace(',', '.'), W = get(r, idx.W).replace(',', '.');
+      if (!get(r, idx.p) && !L && !W) continue;
+      f.pieces.push({ name: get(r, idx.p), L, W, qty: get(r, idx.q) || 1, rot: idx.r >= 0 && get(r, idx.r) !== '' ? yes(get(r, idx.r)) : true, on: idx.u >= 0 && get(r, idx.u) !== '' ? yes(get(r, idx.u)) : true });
+    }
+    out.forEach(f => { if (!f.pieces.length) f.pieces.push(newPiece()); });
+    if (!out.length) throw new Error('No furniture found in the file.');
+    return out;
+  }
+
+  let pendingImport = null;
+  function showImportBar(list) {
+    pendingImport = list;
+    const n = list.reduce((s, f) => s + f.pieces.filter(p => p.L && p.W).length, 0);
+    const hasWork = state.furniture.some(f => f.pieces.some(p => p.L || p.W));
+    const bar = $('importBar');
+    bar.innerHTML = `<span>Found <b>${list.length}</b> furniture with <b>${n}</b> piece types.</span>
+      <span class="ib-btns">${hasWork ? `<button class="btn" data-imp="replace">Replace current</button><button class="btn ghost" data-imp="add">Add to current</button>` : `<button class="btn" data-imp="replace">Load</button>`}<button class="btn ghost" data-imp="cancel">Cancel</button></span>`;
+    bar.hidden = false;
+  }
+  $('importBar').addEventListener('click', e => {
+    const b = e.target.closest('[data-imp]'); if (!b) return;
+    const a = b.dataset.imp;
+    if (a !== 'cancel' && pendingImport) {
+      if (a === 'replace') state.furniture = pendingImport; else state.furniture.push(...pendingImport);
+      renderInputs(); changed(true); toast('Furniture loaded');
+    }
+    pendingImport = null; $('importBar').hidden = true;
+  });
+  $('importFurn').onclick = () => $('furnFile').click();
+  $('furnFile').addEventListener('change', async e => {
+    const file = e.target.files && e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    try { showImportBar(furnitureFromCSV(await file.text())); }
+    catch (err) { toast(err.message || 'Could not read that file'); }
+  });
+  $('exportFurn').onclick = async () => {
+    const csv = furnitureCSV();
+    if (!(await saveFile(`furniture-${today()}.csv`, csv))) showText('Furniture (CSV)', csv);
+  };
+
+  // ---------- copy ----------
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); }
+  $('copyBtn').onclick = async () => {
+    if (!lastText) { toast('Nothing to copy yet'); return; }
+    try { await navigator.clipboard.writeText(lastText); toast('Cut list copied'); }
+    catch (e) { const box = $('copybox'); box.value = lastText; box.style.display = 'block'; box.focus(); box.select(); toast('Select the text below and copy it'); }
+  };
+
+  renderInputs();
+  compute();
+})();
+</script>
+</body>
+</html>
