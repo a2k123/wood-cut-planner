@@ -67,6 +67,19 @@ def test_every_piece_gets_a_label_or_letter(open_app):
     assert r["tags"] > 0 and r["keys"] > 0
 
 
+def _separable(rects):
+    """True if the pieces can be cut apart with straight cuts that each run edge to edge."""
+    if len(rects) <= 1:
+        return True
+    for axis in (0, 1):
+        for c in sorted({r[axis] + r[axis + 2] for r in rects}):
+            left = [r for r in rects if r[axis] + r[axis + 2] <= c]
+            right = [r for r in rects if r[axis] >= c]
+            if left and right and len(left) + len(right) == len(rects):
+                return _separable(left) and _separable(right)
+    return False
+
+
 def test_straight_cut_mode_produces_guillotine_layouts(open_app):
     app = open_app(make_state([NIGHTSTAND, BOOKSHELF], mode="guillotine")).wait_done()
 
@@ -84,6 +97,33 @@ def test_straight_cut_mode_produces_guillotine_layouts(open_app):
 
     for rects in app.boards():
         assert separable(rects), "a plate needs a cut that does not run edge to edge"
+
+
+def test_straight_cut_mode_stays_straight_on_many_random_sets(open_app):
+    """Regression: joining leftover spaces once produced layouts needing a cut that isn't edge to edge."""
+    import random
+    rnd = random.Random(11)
+    for _ in range(12):
+        pcs = [piece(f"P{i}", rnd.randint(20, 150), rnd.randint(5, 60), rnd.randint(1, 4), rot=rnd.random() < .8) for i in range(rnd.randint(4, 9))]
+        pcs = [dict(p, W=min(p["W"], p["L"])) for p in pcs]
+        app = open_app(make_state([furniture("R", rnd.randint(1, 3), pcs)], mode="guillotine")).wait_done()
+        for rects in app.boards():
+            assert _separable(rects), "a plate needs a cut that does not run edge to edge"
+
+
+def test_unticked_piece_is_left_out(open_app):
+    furn = dict(furniture("Desk", 1, [piece("Top", 120, 60), piece("Leg panel", 70, 55, 2), dict(piece("Modesty panel", 100, 30), on=False)]), open=True)
+    app = open_app(make_state([furn])).wait_done()
+    placed, total = map(int, app.page.inner_text(".stat b >> nth=1").split("/"))
+    assert placed == total == 3                                # the unticked panel is not counted
+    titles = " ".join(app.page.evaluate("[...document.querySelectorAll('svg.board g title')].map(t => t.textContent)"))
+    assert "Modesty panel" not in titles and "Top" in titles
+    assert "1 left out" in app.page.inner_text(".furn-foot")
+    assert "off" in app.page.get_attribute(".furn .row.piece:not(.head) >> nth=2", "class")
+    # ticking it again brings it back
+    app.page.check(".furn .row.piece:not(.head) >> nth=2 >> input[data-k=on]")
+    app.page.wait_for_function("[...document.querySelectorAll('.stat b')][1]?.textContent === '4/4'", timeout=20000)
+    assert "off" not in app.page.get_attribute(".furn .row.piece:not(.head) >> nth=2", "class")
 
 
 # ---------------------------------------------------------------- minimum possible plates
@@ -153,9 +193,9 @@ def test_missing_thickness_or_price_shows_dash(open_app):
 # ---------------------------------------------------------------- furniture CSV
 
 def test_furniture_csv_round_trip(open_app, tmp_path):
-    named = dict(NIGHTSTAND, name='שידת לילה, "דגם A"')
+    named = dict(NIGHTSTAND, name='שידת לילה, "דגם A"', pieces=NIGHTSTAND["pieces"][:-1] + [dict(NIGHTSTAND["pieces"][-1], on=False)])
     app = open_app(make_state([named, BOOKSHELF]), stub=DOWNLOADS_STUB).wait_done()
-    before = app.page.evaluate("JSON.stringify(JSON.parse(localStorage.getItem('woodcut-planner-v1')).furniture.map(f => [f.name, String(f.qty), f.pieces.map(p => [p.name, String(p.L), String(p.W), String(p.qty), p.rot])]))")
+    before = app.page.evaluate("JSON.stringify(JSON.parse(localStorage.getItem('woodcut-planner-v1')).furniture.map(f => [f.name, String(f.qty), f.pieces.map(p => [p.name, String(p.L), String(p.W), String(p.qty), p.rot, p.on !== false])]))")
     app.page.click("#exportFurn")
     app.page.wait_for_function("Object.keys(window.__saved).some(k => k.startsWith('furniture'))")
     csv = next(v for k, v in app.saved().items() if k.startswith("furniture"))
@@ -164,7 +204,7 @@ def test_furniture_csv_round_trip(open_app, tmp_path):
     app.page.click("#clearBtn")
     app.page.set_input_files("#furnFile", str(f))
     app.page.click("[data-imp=replace]")
-    after = app.page.evaluate("JSON.stringify(JSON.parse(localStorage.getItem('woodcut-planner-v1')).furniture.map(f => [f.name, String(f.qty), f.pieces.map(p => [p.name, String(p.L), String(p.W), String(p.qty), p.rot])]))")
+    after = app.page.evaluate("JSON.stringify(JSON.parse(localStorage.getItem('woodcut-planner-v1')).furniture.map(f => [f.name, String(f.qty), f.pieces.map(p => [p.name, String(p.L), String(p.W), String(p.qty), p.rot, p.on !== false])]))")
     assert before == after
 
 
@@ -176,7 +216,7 @@ def test_import_hebrew_headers_semicolons_and_decimal_commas(open_app, tmp_path)
     app.page.click("[data-imp=add]")
     last = app.page.evaluate("JSON.parse(localStorage.getItem('woodcut-planner-v1')).furniture.slice(-1)[0]")
     assert last["name"] == "כיסא" and str(last["qty"]) == "4"
-    assert last["pieces"][1] == {"name": "רגל", "L": "45", "W": "4.5", "qty": "4", "rot": False}
+    assert last["pieces"][1] == {"name": "רגל", "L": "45", "W": "4.5", "qty": "4", "rot": False, "on": True}
 
 
 # ---------------------------------------------------------------- exports

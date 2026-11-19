@@ -14,6 +14,7 @@
 - **Furniture with parts:** define a nightstand, a bookshelf or a stool with its pieces, then set **Build** to how many of each you want. The planner multiplies everything out for you.
 - **Furniture cards:** collapse, duplicate or delete each card. Deleting asks you to confirm first.
 - **Grain direction:** untick **Rot** on a piece to keep its length along the plate's length.
+- **Use checkbox:** untick a piece to leave it out of the layout without deleting it, for example a part you already have. It stays in the list, grayed out, and the card shows how many are left out.
 
 ### Plates
 - **Several plate sizes:** add as many plate types as you like, each with a name, length, width and quantity. Leave the quantity blank for unlimited.
@@ -62,15 +63,16 @@ All sizes are in **centimetres**. Areas are in **m²**, volumes in **m³**. Plat
 Each row is one piece. Rows with the same furniture name are grouped together.
 
 ```csv
-Furniture,Build,Piece,Length (cm),Width (cm),Qty,Can rotate
-Nightstand,2,Top,60,45,1,yes
-Nightstand,2,Side,55,40,2,yes
-Nightstand,2,Drawer front,48,14,1,no
-Bookshelf,1,Side,180,30,2,no
-Bookshelf,1,Shelf,76,28,4,yes
+Furniture,Build,Piece,Length (cm),Width (cm),Qty,Can rotate,Include
+Nightstand,2,Top,60,45,1,yes,yes
+Nightstand,2,Side,55,40,2,yes,yes
+Nightstand,2,Drawer front,48,14,1,no,yes
+Bookshelf,1,Side,180,30,2,no,yes
+Bookshelf,1,Shelf,76,28,4,yes,no
 ```
 
 - **Build** is how many of that furniture to make. **Qty** is per one piece of furniture.
+- **Include** is `yes` or `no`, matching the Use checkbox. If the column is missing, every piece is included, so older files still work.
 - Commas or semicolons both work, so Excel files from any region import fine. Decimal commas (`4,5`) work too.
 - Hebrew column headers are recognized: `רהיט, כמות רהיטים, חלק, אורך, רוחב, כמות, סיבוב`.
 
@@ -98,8 +100,8 @@ To host your own copy, put `index.html` on any static host, such as GitHub Pages
 Browser tests in `tests/` open the page in headless Chromium and check:
 - layouts have no overlaps and pieces stay inside the usable area
 - the allowance and edge trim are applied, and grain-locked pieces never rotate
-- every piece gets a label or a letter
-- straight-cut mode really produces edge-to-edge cuts
+- every piece gets a label or a letter, and unticked pieces are left out
+- straight-cut mode really produces edge-to-edge cuts, including on many random sets
 - the minimum is correct for narrow boards and respects plate quantities
 - the area, volume and price totals are right, and inch fractions are read correctly
 - furniture CSV round-trips, and imports with Hebrew headers, semicolons and decimal commas work
