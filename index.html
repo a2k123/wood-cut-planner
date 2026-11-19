@@ -524,9 +524,86 @@
   }
   const better = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] < b[i] - 1e-9) return true; if (a[i] > b[i] + 1e-9) return false; } return false; };
 
+  // ---- width-aware minimum for narrow boards ----
+  // When every piece can only lie one way on the plate, look along the plate: at any point, the pieces
+  // stacked across the width must fit in the width. The least total plate length that can hold all pieces
+  // that way (a small linear program) gives a floor that knows e.g. two 15 cm pieces can't share a 17 cm board.
+  function lpMinCover(A, D) {
+    // minimise sum(y) subject to A·y >= D, y >= 0  (two-phase simplex, Bland's rule)
+    const n = D.length, m = A[0].length, cols = m + 2 * n, EPS = 1e-9;
+    const T = [], basis = [];
+    for (let i = 0; i < n; i++) {
+      const row = new Float64Array(cols + 1);
+      for (let j = 0; j < m; j++) row[j] = A[i][j];
+      row[m + i] = -1; row[m + n + i] = 1; row[cols] = D[i];
+      T.push(row); basis.push(m + n + i);
+    }
+    const run = (cost, allowed) => {
+      for (let iter = 0; iter < 20000; iter++) {
+        let enter = -1;
+        for (let j = 0; j < cols && enter < 0; j++) {
+          if (!allowed(j)) continue;
+          let rc = cost[j];
+          for (let i = 0; i < n; i++) rc -= cost[basis[i]] * T[i][j];
+          if (rc < -EPS) enter = j;
+        }
+        if (enter < 0) return true;
+        let leave = -1, best = Infinity;
+        for (let i = 0; i < n; i++) {
+          const a = T[i][enter];
+          if (a > EPS) { const r = T[i][cols] / a; if (r < best - EPS || (Math.abs(r - best) <= EPS && basis[i] < basis[leave])) { best = r; leave = i; } }
+        }
+        if (leave < 0) return false; // unbounded (cannot happen here)
+        const pr = T[leave], pv = pr[enter];
+        for (let j = 0; j <= cols; j++) pr[j] /= pv;
+        for (let i = 0; i < n; i++) if (i !== leave) { const f = T[i][enter]; if (f) for (let j = 0; j <= cols; j++) T[i][j] -= f * pr[j]; }
+        basis[leave] = enter;
+      }
+      return false;
+    };
+    const c1 = new Float64Array(cols); for (let i = 0; i < n; i++) c1[m + n + i] = 1;
+    if (!run(c1, () => true)) return 0;
+    const c2 = new Float64Array(cols); for (let j = 0; j < m; j++) c2[j] = 1;
+    if (!run(c2, j => j < m + n)) return 0;
+    let v = 0; for (let i = 0; i < n; i++) if (basis[i] < m) v += T[i][cols];
+    return v;
+  }
+  function stripMin(items, t, kerf) {
+    const BL = t.uL + kerf, BW = t.uW + kerf;
+    const pieces = [];
+    for (const it of items) {
+      const a = it.pw <= BL && it.ph <= BW, b = it.rot && it.ph <= BL && it.pw <= BW;
+      if (a && b && it.pw !== it.ph) return 0;          // piece could lie either way: bound does not apply
+      if (a) pieces.push([it.pw, it.ph]); else if (b) pieces.push([it.ph, it.pw]);
+    }
+    if (!pieces.length) return 0;
+    const along = (lenIdx, cap, run) => {
+      const D = new Map();
+      for (const p of pieces) D.set(p[1 - lenIdx], (D.get(p[1 - lenIdx]) || 0) + p[lenIdx]);
+      const ws = [...D.keys()].sort((x, y) => y - x);
+      if (ws.length > 24) return 0;
+      const pats = [], cur = new Array(ws.length).fill(0), minW = ws[ws.length - 1];
+      let overflow = false;
+      (function rec(i, room) {
+        if (overflow) return;
+        if (i === ws.length) { if (room < minW && cur.some(Boolean)) { pats.push(cur.slice()); if (pats.length > 4000) overflow = true; } return; }
+        for (let k = Math.floor(room / ws[i]); k >= 0; k--) { cur[i] = k; rec(i + 1, room - k * ws[i]); }
+        cur[i] = 0;
+      })(0, cap);
+      if (overflow || !pats.length) return 0;
+      const A = ws.map((_, c) => pats.map(p => p[c]));
+      const need = lpMinCover(A, ws.map(w => D.get(w)));
+      return need > 0 ? Math.ceil(need / run - 1e-7) : 0;
+    };
+    return Math.max(along(0, BW, BL), along(1, BL, BW));
+  }
+
   // smallest number of plates whose usable area could hold all pieces, using the biggest plates first
   // and respecting how many of each plate you have (ignores shapes, so it is a floor, not a promise)
-  function minPlates(items, types) {
+  function minPlates(items, types, kerf = 0) {
+    // pieces that fit no plate at all are reported separately and must not inflate the minimum
+    items = items.filter(it => types.some(t => (it.pw <= t.uL + kerf && it.ph <= t.uW + kerf) || (it.rot && it.ph <= t.uL + kerf && it.pw <= t.uW + kerf)));
+    if (!items.length) return 1;
     let need = items.reduce((s, it) => s + it.pw * it.ph, 0), n = 0;
     const sorted = types.slice().sort((a, b) => b.uL * b.uW - a.uL * a.uW);
     for (const t of sorted) {
@@ -534,6 +611,7 @@
       const k = Math.min(t.qty, Math.ceil(need / a));
       n += k; need -= k * a;
     }
+    if (types.length === 1) { try { n = Math.max(n, stripMin(items, types[0], kerf)); } catch (e) {} }
     return Math.max(1, n);
   }
 
@@ -579,7 +657,7 @@
     };
 
     // lower bound on plates (area only), used to stop early
-    const lowerBound = minPlates(items, types);
+    const lowerBound = minPlates(items, types, opts.kerf);
 
     // phase 1 — quick deterministic pass
     if (seed && seed.order) tryRun(seed.order, seed.P);
@@ -690,7 +768,7 @@
       if (res) render(res, types, items, allowance, kerf, trim, furnUsed, info.lowerBound);
       const st = $('search');
       if (info.done) {
-        const atMin = res && res.bins.length <= info.lowerBound;
+        const atMin = res && !res.unplaced.length && res.bins.length <= info.lowerBound;
         st.className = 'search done';
         st.textContent = `${atMin ? 'Minimum possible plates reached' : 'Best layout found'} · searched ${(info.ms / 1000).toFixed(1)} s · ${info.runs.toLocaleString()} layouts tried`;
         $('moreBtn').hidden = atMin;
@@ -715,7 +793,7 @@
 
     let html = `<div class="stats">
       <div class="stat"><b>${res.bins.length}</b><span>plate${res.bins.length === 1 ? '' : 's'} needed</span>
-        <em class="minline ${res.bins.length <= lowerBound ? 'at-min' : ''}" title="Smallest number of plates the total piece area could possibly fit on (ignores piece shapes)">Minimum possible: ${lowerBound}${res.bins.length <= lowerBound ? ' ✓' : ''}</em></div>
+        <em class="minline ${!res.unplaced.length && res.bins.length <= lowerBound ? 'at-min' : ''}" title="No layout can use fewer plates than this. It counts total area and, on narrow boards, which pieces can sit side by side.">Minimum possible: ${lowerBound}${!res.unplaced.length && res.bins.length <= lowerBound ? ' ✓' : ''}</em></div>
       <div class="stat"><b>${placedN}/${items.length}</b><span>pieces placed</span></div>
       <div class="stat"><b>${pct}%</b><span>material used</span></div>
       <div class="stat"><b>${((plateArea - usedArea) / 1e8).toFixed(2)}</b><span>m² offcut</span></div>
