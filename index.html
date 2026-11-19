@@ -19,15 +19,15 @@
   header{padding:22px 20px 6px;max-width:1280px;margin:0 auto}
   h1{margin:0;font-size:22px;letter-spacing:-.01em}
   header p{margin:4px 0 0;color:var(--muted);font-size:14px}
-  main{max-width:1280px;margin:0 auto;padding:14px 20px 40px;display:grid;grid-template-columns:minmax(330px,430px) 1fr;gap:18px;align-items:start}
+  main{max-width:1280px;margin:0 auto;padding:14px 20px 40px;display:grid;grid-template-columns:minmax(330px,470px) 1fr;gap:18px;align-items:start}
   @media (max-width:880px){main{grid-template-columns:1fr}}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
   .card + .card{margin-top:14px}
   h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 10px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
   .rows{display:flex;flex-direction:column;gap:6px}
   .row{display:grid;gap:6px;align-items:center}
-  .row.plate{grid-template-columns:1fr 58px 58px 56px 48px 28px}
-  @media (max-width:520px){.row.plate{grid-template-columns:1fr 1fr 1fr 1fr 28px}.row.plate>input:first-child{grid-column:1/-1}.row.plate.head span:first-child{display:none}.rows .row.plate{padding-bottom:6px;border-bottom:1px dashed var(--line)}}
+  .row.plate{grid-template-columns:1fr 50px 50px 46px 42px 60px 26px}
+  @media (max-width:520px){.row.plate{grid-template-columns:1fr 1fr 1fr 1fr 1.3fr 28px}.row.plate>input:first-child{grid-column:1/-1}.row.plate.head span:first-child{display:none}.rows .row.plate{padding-bottom:6px;border-bottom:1px dashed var(--line)}}
   .row.piece{grid-template-columns:1fr 58px 58px 46px 34px 28px}
   .row.head{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   .row.head span{padding-left:2px}
@@ -82,7 +82,8 @@
   .btn{border:0;background:var(--accent);color:#fff;border-radius:8px;padding:8px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
   .btn.ghost{background:none;color:var(--accent);border:1px solid var(--line)}
   .btn:hover{filter:brightness(1.08)}
-  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+  .stat.price b{color:var(--accent)}
   @media (max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
   .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
   .stat b{display:block;font-size:24px;font-family:var(--mono);font-weight:600;letter-spacing:-.02em}
@@ -136,7 +137,7 @@
   <section>
     <div class="card">
       <h2>Plates <span style="text-transform:none;letter-spacing:0;font-weight:400">blank qty = unlimited</span></h2>
-      <div class="row plate head"><span>Name</span><span>Length</span><span>Width</span><span title="Thickness in inches, e.g. 3/4 or 0.75">Thick in</span><span>Qty</span><span></span></div>
+      <div class="row plate head"><span>Name</span><span>Length</span><span>Width</span><span title="Thickness in inches, e.g. 3/4 or 0.75">Thick″</span><span>Qty</span><span title="Price per cubic metre">Price/m³</span><span></span></div>
       <div class="rows" id="plates"></div>
       <button class="add" id="addPlate">+ Add plate size</button>
     </div>
@@ -159,6 +160,7 @@
       <div class="settings">
         <label>Allowance added to length & width (cm)<input type="number" id="allowance" step="0.1" min="0" inputmode="decimal"></label>
         <label>Edge trim lost per plate, length & width (cm)<input type="number" id="trim" step="0.1" min="0" inputmode="decimal"></label>
+        <label>Currency symbol<input type="text" id="currency" maxlength="6" autocomplete="off" placeholder="₪"></label>
         <label>Saw blade gap / kerf (cm)<input type="number" id="kerf" step="0.1" min="0" inputmode="decimal"></label>
         <label class="full">Search effort
           <select id="effort">
@@ -204,8 +206,8 @@
 (() => {
   // ---------- state ----------
   const EXAMPLE = {
-    allowance: 2, trim: 2, kerf: 0, mode: 'free', effort: 'normal',
-    plates: [{ name: 'Plywood 3/4"', L: 244, W: 122, T: '3/4', qty: '' }],
+    allowance: 2, trim: 2, kerf: 0, mode: 'free', effort: 'normal', currency: '₪',
+    plates: [{ name: 'Plywood 3/4"', L: 244, W: 122, T: '3/4', qty: '', P: '' }],
     furniture: [
       { name: 'Nightstand', qty: 2, open: true, pieces: [
         { name: 'Top', L: 60, W: 45, qty: 1, rot: true },
@@ -235,6 +237,7 @@
   if (!state || !Array.isArray(state.plates) || !Array.isArray(state.furniture)) state = JSON.parse(JSON.stringify(EXAMPLE));
   if (state.trim === undefined) state.trim = 2;
   if (!state.effort) state.effort = 'normal';
+  if (state.currency === undefined) state.currency = '₪';
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 
   // ---------- colors: one hue per furniture, shades per piece ----------
@@ -275,6 +278,7 @@
         <input type="number" data-k="W" value="${esc(p.W)}" step="0.1" min="0" inputmode="decimal" placeholder="W">
         <input type="text" data-k="T" value="${esc(p.T ?? '')}" placeholder="3/4" title="Thickness in inches, e.g. 3/4, 1 1/2 or 0.75" autocomplete="off">
         <input type="number" data-k="qty" value="${esc(p.qty)}" step="1" min="0" inputmode="numeric" placeholder="∞">
+        <input type="number" data-k="P" value="${esc(p.P ?? '')}" step="any" min="0" inputmode="decimal" placeholder="price" title="Price per cubic metre (m³)">
         <button class="x" data-del="plate" title="Remove">×</button>
       </div>`).join('');
     $('furniture').innerHTML = state.furniture.map((f, fi) => `
@@ -298,6 +302,7 @@
     $('kerf').value = state.kerf;
     $('mode').value = state.mode;
     $('effort').value = state.effort;
+    $('currency').value = state.currency;
   }
 
   // plates
@@ -308,7 +313,7 @@
   $('plates').addEventListener('click', e => {
     const b = e.target.closest('[data-del]'); if (!b) return;
     state.plates.splice(+b.closest('.row').dataset.i, 1);
-    if (!state.plates.length) state.plates.push({ name: '', L: '', W: '', T: '', qty: '' });
+    if (!state.plates.length) state.plates.push({ name: '', L: '', W: '', T: '', qty: '', P: '' });
     renderInputs(); changed(true);
   });
 
@@ -350,12 +355,12 @@
     if (del) { f.pieces.splice(+del.closest('.row').dataset.i, 1); renderInputs(); changed(true); }
   });
 
-  $('addPlate').onclick = () => { state.plates.push({ name: '', L: '', W: '', T: '', qty: '' }); renderInputs(); const r = $('plates').querySelectorAll('.row'); r[r.length - 1].querySelector('input[data-k=L]').focus(); };
+  $('addPlate').onclick = () => { state.plates.push({ name: '', L: '', W: '', T: '', qty: '', P: '' }); renderInputs(); const r = $('plates').querySelectorAll('.row'); r[r.length - 1].querySelector('input[data-k=L]').focus(); };
   $('addFurn').onclick = () => {
     state.furniture.push({ name: '', qty: 1, open: true, pieces: [newPiece()] }); renderInputs();
     const fs = F.querySelectorAll('.furn'); fs[fs.length - 1].querySelector('.fname').focus();
   };
-  ['allowance', 'trim', 'kerf', 'mode', 'effort'].forEach(id => $(id).addEventListener('input', e => { state[id] = e.target.value; changed(); }));
+  ['allowance', 'trim', 'kerf', 'mode', 'effort', 'currency'].forEach(id => $(id).addEventListener('input', e => { state[id] = e.target.value; changed(); }));
   $('resetBtn').onclick = () => { state = JSON.parse(JSON.stringify(EXAMPLE)); renderInputs(); changed(true); };
   $('clearBtn').onclick = () => { state.furniture = [{ name: '', qty: 1, open: true, pieces: [newPiece()] }]; renderInputs(); changed(true); };
 
@@ -743,13 +748,21 @@
   }
   // total area (m²) and volume (m³) of all plates needed; volume needs every used plate's thickness
   function plateTotals(bins) {
-    let area = 0, vol = 0, missing = false;
+    let area = 0, vol = 0, missing = false, price = 0, noPrice = false;
     for (const b of bins) {
       const a = b.type.L * b.type.W / 1e8;          // 1/100 cm units -> m²
       area += a;
-      if (b.type.T > 0) vol += a * b.type.T * 0.0254; else missing = true;   // inches -> metres
+      const v = b.type.T > 0 ? a * b.type.T * 0.0254 : 0;   // inches -> metres
+      if (b.type.T > 0) vol += v; else missing = true;
+      if (b.type.T > 0 && isFinite(b.type.P)) price += v * b.type.P; else noPrice = true;
     }
-    return { area, vol, missing };
+    return { area, vol, missing, price, noPrice };
+  }
+  function plateCost(t) { const a = t.L * t.W / 1e8; return t.T > 0 && isFinite(t.P) ? a * t.T * 0.0254 * t.P : NaN; }
+  function money(v) {
+    const c = String(state.currency ?? '').trim();
+    const n = v.toLocaleString('en-US', { minimumFractionDigits: v < 1000 ? 2 : 0, maximumFractionDigits: v < 1000 ? 2 : 0 });
+    return c ? `${c}${n}` : n;
   }
   const fmtVol = v => v < 1 ? v.toFixed(3) : v.toFixed(2);
 
@@ -758,7 +771,7 @@
   function compute() {
     const allowance = U(num(state.allowance) || 0), kerf = U(num(state.kerf) || 0), trim = U(num(state.trim) || 0);
     const types = state.plates.map((p, i) => ({
-      i, name: p.name.trim() || `Plate ${i + 1}`, L: U(num(p.L)), W: U(num(p.W)), T: inches(p.T), Tlabel: String(p.T ?? '').trim(),
+      i, name: p.name.trim() || `Plate ${i + 1}`, L: U(num(p.L)), W: U(num(p.W)), T: inches(p.T), Tlabel: String(p.T ?? '').trim(), P: num(p.P) >= 0 ? num(p.P) : NaN,
       qty: String(p.qty).trim() === '' ? Infinity : Math.max(0, Math.floor(num(p.qty)) || 0)
     })).map(t => ({ ...t, uL: t.L - trim, uW: t.W - trim })).filter(t => t.L > 0 && t.W > 0 && t.uL > 0 && t.uW > 0);
 
@@ -824,6 +837,7 @@
       <div class="stat"><b>${((plateArea - usedArea) / 1e8).toFixed(2)}</b><span>m² offcut</span></div>
       <div class="stat"><b>${tot.area.toFixed(2)}</b><span>m² total plate area</span></div>
       <div class="stat"><b>${tot.missing ? '—' : fmtVol(tot.vol)}</b><span>${tot.missing ? 'm³ total volume · add plate thickness (in)' : 'm³ total plate volume'}</span></div>
+      <div class="stat price"><b>${tot.noPrice ? '—' : esc(money(tot.price))}</b><span>${tot.noPrice ? 'total price · add thickness and price per m³ for each plate' : 'total price'}</span></div>
     </div>`;
 
     if (res.unplaced.length) {
@@ -844,12 +858,12 @@
       <span><i class="lg trim"></i>Edge trim ${fmt(trim)} cm (lost)</span>
       <span><i class="lg off"></i>Usable offcut</span>
     </div><div class="legend furn-legend">` + furnUsed.map(f => `<span><i class="lg" style="background:${fillOf(f.fi, 0)};border:1px solid ${strokeOf(f.fi)}"></i><b style="color:var(--ink);font-weight:600"><bdi>${esc(f.fname)}</bdi></b>&nbsp;× ${f.fq} · ${f.count} pcs</span>`).join('') + `</div>`;
-    const lines = [`CUT LIST — ${res.bins.length} plate(s): ${typeBreak.replace(/&amp;/g, '&')}`, `Building: ${furnUsed.map(f => `${f.fq} × ${f.fname}`).join(', ')}`, `Total plate area ${tot.area.toFixed(2)} m²${tot.missing ? '' : `, total volume ${fmtVol(tot.vol)} m³`}`, `Edge trim ${fmt(trim)} cm per plate (usable area shown). Allowance +${fmt(allowance)} cm on length & width${kerf ? `, kerf ${fmt(kerf)} cm` : ''}. Sizes: piece → cut size (L × W, cm). Position = from the plate's top-left corner.`, ''];
+    const lines = [`CUT LIST — ${res.bins.length} plate(s): ${typeBreak.replace(/&amp;/g, '&')}`, `Building: ${furnUsed.map(f => `${f.fq} × ${f.fname}`).join(', ')}`, `Total plate area ${tot.area.toFixed(2)} m²${tot.missing ? '' : `, total volume ${fmtVol(tot.vol)} m³`}${tot.noPrice ? '' : `, total price ${money(tot.price)}`}`, `Edge trim ${fmt(trim)} cm per plate (usable area shown). Allowance +${fmt(allowance)} cm on length & width${kerf ? `, kerf ${fmt(kerf)} cm` : ''}. Sizes: piece → cut size (L × W, cm). Position = from the plate's top-left corner.`, ''];
 
     res.bins.forEach((b, bi) => {
       const used = b.placed.reduce((s, p) => s + p.it.L * p.it.W, 0);
       const u = Math.round(used / (b.type.L * b.type.W) * 100);
-      html += `<div class="sheet"><div class="sheet-head"><h3>Plate ${bi + 1} · ${esc(b.type.name)}</h3><span class="meta">${fmt(b.type.L)} × ${fmt(b.type.W)} cm${b.type.T ? ` · ${esc(b.type.Tlabel)}″` : ''} (usable ${fmt(b.type.uL)} × ${fmt(b.type.uW)}) · ${b.placed.length} pcs · ${u}% used</span></div>`;
+      html += `<div class="sheet"><div class="sheet-head"><h3>Plate ${bi + 1} · ${esc(b.type.name)}</h3><span class="meta">${fmt(b.type.L)} × ${fmt(b.type.W)} cm${b.type.T ? ` · ${esc(b.type.Tlabel)}″` : ''} (usable ${fmt(b.type.uL)} × ${fmt(b.type.uW)}) · ${b.placed.length} pcs · ${u}% used${isFinite(plateCost(b.type)) ? ` · ${esc(money(plateCost(b.type)))}` : ''}</span></div>`;
       html += boardSVG(b, bi, off, allowance) + keyHTML(b);
       const sorted = b.placed.slice().sort((a, c) => a.it.fi - c.it.fi || a.it.pi - c.it.pi || a.it.k - c.it.k);
       html += `<details><summary>Piece list for plate ${bi + 1}</summary><table><thead><tr><th>Furniture</th><th>Piece</th><th>Piece size</th><th>Cut size (+allowance)</th><th>Position (x, y)</th><th></th></tr></thead><tbody>` +
@@ -1047,10 +1061,11 @@
     const usedArea = res.bins.reduce((s, b) => s + b.placed.reduce((t, p) => t + p.it.L * p.it.W, 0), 0);
     const tot = plateTotals(res.bins);
     const stats = [[String(res.bins.length), `${res.bins.length === 1 ? 'plate needed' : 'plates needed'} · minimum possible: ${L.lowerBound}`], [`${items.length - res.unplaced.length}/${items.length}`, 'pieces placed'], [`${plateArea ? Math.round(usedArea / plateArea * 100) : 0}%`, 'material used'],
-      [((plateArea - usedArea) / 1e8).toFixed(2), 'm² offcut'], [tot.area.toFixed(2), 'm² total plate area'], [tot.missing ? '—' : fmtVol(tot.vol), tot.missing ? 'm³ total volume (plate thickness missing)' : 'm³ total plate volume']];
-    const bw = (CW - 2 * 5) / 3;
+      [((plateArea - usedArea) / 1e8).toFixed(2), 'm² offcut'], [tot.area.toFixed(2), 'm² total plate area'], [tot.missing ? '—' : fmtVol(tot.vol), tot.missing ? 'm³ total volume (plate thickness missing)' : 'm³ total plate volume'],
+      [tot.noPrice ? '—' : money(tot.price), tot.noPrice ? 'total price (thickness or price missing)' : 'total price']];
+    const bw = (CW - 3 * 5) / 4;
     stats.forEach(([v, l], i) => {
-      const x = MG + (i % 3) * (bw + 5), y = MG + 18 + Math.floor(i / 3) * 20;
+      const x = MG + (i % 4) * (bw + 5), y = MG + 18 + Math.floor(i / 4) * 20;
       g.fillStyle = '#fbf8f3'; g.strokeStyle = '#e4dcd0'; g.lineWidth = 0.3; g.fillRect(x, y, bw, 17); g.strokeRect(x, y, bw, 17);
       txt(g, v, x + 4, y + 9, { size: 6, weight: 700 }); txt(g, l, x + 4, y + 14, { size: 2.8, color: '#7a6f66' });
     });
@@ -1137,9 +1152,9 @@
   function buildCSV() {
     const { res, trim } = lastRes; const off = Math.round(trim / 2);
     const q = v => { v = String(v ?? ''); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    const out = [['Plate', 'Plate type', 'Thickness (in)', 'Furniture', 'Piece', 'Number', 'Piece length (cm)', 'Piece width (cm)', 'Cut length (cm)', 'Cut width (cm)', 'X (cm)', 'Y (cm)', 'Rotated']];
-    res.bins.forEach((b, bi) => b.placed.slice().sort((a, c) => a.it.fi - c.it.fi || a.it.pi - c.it.pi || a.it.k - c.it.k).forEach(p => out.push([bi + 1, b.type.name, b.type.Tlabel || '', p.it.fname, p.it.name, p.it.k, fmt(p.it.origL), fmt(p.it.origW), fmt(p.it.L), fmt(p.it.W), fmt(p.x + off), fmt(p.y + off), p.r ? 'yes' : 'no'])));
-    res.unplaced.forEach(it => out.push(['NOT PLACED', '', '', it.fname, it.name, it.k, fmt(it.origL), fmt(it.origW), fmt(it.L), fmt(it.W), '', '', '']));
+    const out = [['Plate', 'Plate type', 'Thickness (in)', 'Plate price', 'Furniture', 'Piece', 'Number', 'Piece length (cm)', 'Piece width (cm)', 'Cut length (cm)', 'Cut width (cm)', 'X (cm)', 'Y (cm)', 'Rotated']];
+    res.bins.forEach((b, bi) => b.placed.slice().sort((a, c) => a.it.fi - c.it.fi || a.it.pi - c.it.pi || a.it.k - c.it.k).forEach(p => out.push([bi + 1, b.type.name, b.type.Tlabel || '', isFinite(plateCost(b.type)) ? plateCost(b.type).toFixed(2) : '', p.it.fname, p.it.name, p.it.k, fmt(p.it.origL), fmt(p.it.origW), fmt(p.it.L), fmt(p.it.W), fmt(p.x + off), fmt(p.y + off), p.r ? 'yes' : 'no'])));
+    res.unplaced.forEach(it => out.push(['NOT PLACED', '', '', '', it.fname, it.name, it.k, fmt(it.origL), fmt(it.origW), fmt(it.L), fmt(it.W), '', '', '']));
     return '﻿' + out.map(r => r.map(q).join(',')).join('\r\n');
   }
 

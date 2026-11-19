@@ -1,38 +1,61 @@
 # 🪵 Wood Cut Planner
 
-**Plan your cuts before you touch the saw.** Describe your furniture and your sheet goods, and Wood Cut Planner lays every piece out on as few plates as possible. It then gives you a printable cut plan.
+**Plan your cuts before you touch the saw.** Describe your furniture and your boards or sheets, and Wood Cut Planner lays every piece out on as few plates as possible. It tells you what the material will cost and gives you a printable cut plan.
 
-**▶ Live site: https://a2k123.github.io/wood-cut-planner/**
+**▶ Live site: https://a2k123.github.io/wood-cut-planner/**  ·  Preview of upcoming changes: [/dev/](https://a2k123.github.io/wood-cut-planner/dev/)
 
 ![Wood Cut Planner showing furniture inputs on the left and a packed plywood sheet on the right](docs/screenshot.png)
 
 ---
 
-## What it does
+## Features
 
-- **Plans by furniture, not by loose parts.** Define a nightstand, a bookshelf or a stool with its pieces, then choose how many of each to build. The planner multiplies everything out for you.
-- **Accounts for real-world waste.**
-  - **Edge trim:** every plate loses a strip when you straighten its edges. The default is 2 cm off the length and the width, and only the usable area is packed.
-  - **Allowance:** a margin added to each piece's length and width, 2 cm by default, so you can trim to final size.
-  - **Saw kerf:** an optional gap for the width of the blade.
-- **Respects grain direction.** Untick *Rot* on a piece to keep its length along the plate's length.
-- **Supports two layout styles:**
+### Plan by furniture
+- **Furniture with parts:** define a nightstand, a bookshelf or a stool with its pieces, then set **Build** to how many of each you want. The planner multiplies everything out for you.
+- **Furniture cards:** collapse, duplicate or delete each card. Deleting asks you to confirm first.
+- **Grain direction:** untick **Rot** on a piece to keep its length along the plate's length.
+
+### Plates
+- **Several plate sizes:** add as many plate types as you like, each with a name, length, width and quantity. Leave the quantity blank for unlimited.
+- **Thickness in inches:** type it the way woodworkers write it: `3/4`, `1 1/2`, `1-1/2`, `5/8"` or `0.75`.
+- **Price per m³:** set a price for each plate type.
+
+### Real-world waste
+- **Edge trim:** every plate loses a strip when you straighten its edges. The default is 2 cm off the length and the width, and only the usable area is packed.
+- **Allowance:** a margin added to each piece's length and width, 2 cm by default, so you can trim to final size.
+- **Saw kerf:** an optional gap for the width of the blade.
+
+### Smart arrangement
+- **Two layout styles:**
   - **Tightest fit:** any arrangement that saves the most material.
   - **Straight through-cuts only:** every cut runs edge to edge, which is what a table saw or panel saw needs.
-- **Makes clear drawings.** Each plate shows the real piece (solid), the allowance (striped band), the edge trim (hatched frame) and the usable offcut. Pieces too small to label get a letter, explained in a key under the plate.
-- **Handles several plate sizes.** Mix plate types and limit how many of each you have. It warns you if a piece doesn't fit or you run out of plates.
+- **Background search:** the planner keeps looking for a better layout without freezing the page, and redraws whenever it finds one. Choose **Quick** (under half a second), **Normal** (up to 3 seconds) or **Thorough** (up to 10 seconds).
+- **Live progress:** a status line shows the search time and the number of layouts tried.
+- **Search 10 s more:** a button that appears when the minimum wasn't reached.
+- **Minimum possible plates:** no layout can use fewer plates than this number. It counts total area, how many of each plate you have, and, on narrow boards, which pieces can actually sit side by side. A ✓ appears when your layout reaches it.
 
-## Exports
+### Results
+- **Totals:** plates needed, pieces placed, material used and offcut (m²).
+- **Plate area, volume and price:** total plate area (m²), total plate volume (m³) and **total price**, using each plate's volume × its price per m³. You choose the currency symbol (₪ by default).
+- **Clear drawings:** each plate shows the real piece (solid), the allowance (striped band), the edge trim (hatched frame) and the usable offcut.
+- **Labels on every piece:** pieces too small for a label get a letter. A key under the plate explains each letter, and identical small pieces share one letter.
+- **Warnings:** you're told when a piece is bigger than every plate, only fits if rotated, or when you've run out of plates.
 
+### Exports and saving
 | Button | What you get |
 |---|---|
-| **Export PDF** | An A4 landscape cut plan. Page 1 has a summary and a full parts list. Then there is one page per plate with its sketch and the pieces on it. |
-| **Export CSV** | One row per piece: plate, furniture, piece, real size, cut size, position, rotation. It opens in Excel and Google Sheets. |
+| **Export PDF** | An A4 landscape cut plan. Page 1 has a summary with all the totals and a full parts list. Then there is one page per plate with its sketch, letter key and pieces. |
+| **Export CSV** | One row per piece: plate, thickness, plate price, furniture, piece, real size, cut size, position, rotation. It opens in Excel and Google Sheets. |
 | **Copy text** | A plain-text cut list for pasting into a message. |
 | **Save furniture as CSV** | Your furniture designs, so you can keep your work or share it. |
 | **Import furniture CSV** | Load saved designs, replacing what you have or adding to it. |
 
-Hebrew (and other right-to-left) names display correctly on screen, in the PDF and in Excel.
+- **Hebrew and other right-to-left names** display correctly on screen, in the PDF and in Excel.
+- **Shared views:** in a shared Claude view, where downloads aren't allowed, the PDF opens as page images you can save and the CSV opens as text you can copy.
+- **Phones:** the layout works on phone screens.
+
+### Units
+All sizes are in **centimetres**. Areas are in **m²**, volumes in **m³**. Plate **thickness** is the one exception: it's in **inches**.
 
 ## Furniture CSV format
 
@@ -55,10 +78,11 @@ Bookshelf,1,Shelf,76,28,4,yes
 
 The whole app is a single `index.html` file, with no build step and no server.
 
-- **Packing:** two methods are used, depending on the layout style.
+- **Packing:** two methods are used.
   - **Tightest fit** uses the *MaxRects* method.
-  - **Straight through-cuts** uses a *guillotine* method, which splits the remaining space in two after every cut.
-- **Search:** the planner tries many piece orders, placement rules and split rules. It keeps the layout that uses the fewest plates, then the least material. Among equal options, it prefers the one that leaves one large usable offcut.
+  - **Straight through-cuts** uses a *guillotine* method, which splits the remaining space in two after every cut. Tightest fit also tries guillotine layouts, because they're valid there too.
+- **Search:** the planner tries many piece orders and placement rules. It then keeps improving the best one with small changes, and tries to fit everything on one plate fewer by spreading pieces across a fixed set of plates. It keeps the layout that uses the fewest plates, then the least material. Among equal options, it prefers the one that leaves one large usable offcut.
+- **Minimum:** on narrow boards, a small linear program over the ways pieces can stack across the width gives the true least board length needed.
 - **Drawing:** plates are drawn as SVG.
 - **PDF:** pages are drawn on a canvas, so right-to-left text always renders correctly, then packed into a PDF with [jsPDF](https://github.com/parallax/jsPDF).
 - **Privacy:** your data stays in your browser's local storage. Nothing is uploaded anywhere.
@@ -68,6 +92,38 @@ The whole app is a single `index.html` file, with no build step and no server.
 Download `index.html` and open it in any modern browser. That's it.
 
 To host your own copy, put `index.html` on any static host, such as GitHub Pages, Netlify or Cloudflare Pages.
+
+## Tests
+
+Browser tests in `tests/` open the page in headless Chromium and check:
+- layouts have no overlaps and pieces stay inside the usable area
+- the allowance and edge trim are applied, and grain-locked pieces never rotate
+- every piece gets a label or a letter
+- straight-cut mode really produces edge-to-edge cuts
+- the minimum is correct for narrow boards and respects plate quantities
+- the area, volume and price totals are right, and inch fractions are read correctly
+- furniture CSV round-trips, and imports with Hebrew headers, semicolons and decimal commas work
+- PDF and CSV exports work inside Claude, in a shared view and as a normal website
+- the phone layout doesn't scroll sideways
+
+Run them:
+
+```bash
+pip install pytest playwright
+python -m playwright install chromium
+python -m pytest -q
+```
+
+They also run automatically on GitHub for every push (see the **Actions** tab).
+
+## Branches
+
+| Branch | What it is |
+|---|---|
+| `prod` | The live site at the main address. |
+| `dev` | The preview at `/dev/`, for trying changes before they go live. |
+| `main` | The default branch, kept in step with `prod`. |
+| `gh-pages` | Built automatically from `prod` and `dev`. Don't edit it by hand. |
 
 ## Feedback
 
