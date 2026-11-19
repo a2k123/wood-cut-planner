@@ -86,6 +86,8 @@
   .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
   .stat b{display:block;font-size:24px;font-family:var(--mono);font-weight:600;letter-spacing:-.02em}
   .stat span{font-size:12px;color:var(--muted)}
+  .stat .minline{display:block;font-style:normal;font-size:12px;color:var(--muted);margin-top:4px;padding-top:4px;border-top:1px dashed var(--line)}
+  .stat .minline.at-min{color:var(--ok);font-weight:600}
   .warn{background:#fbeee9;border:1px solid #efc9bd;color:#7d2e20;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:14px}
   .warn ul{margin:6px 0 0;padding-left:18px}
   .sheet{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
@@ -651,7 +653,7 @@
     if (items.length > 2000) { R.innerHTML = `<div class="card empty">That's ${items.length} pieces — please keep it under 2000.</div>`; return; }
 
     solve(items, types, { mode: state.mode, kerf, effort: state.effort }, (res, info) => {
-      if (res) render(res, types, items, allowance, kerf, trim, furnUsed);
+      if (res) render(res, types, items, allowance, kerf, trim, furnUsed, info.lowerBound);
       const st = $('search');
       if (info.done) {
         st.className = 'search done';
@@ -663,7 +665,7 @@
     });
   }
 
-  function render(res, types, items, allowance, kerf, trim, furnUsed) {
+  function render(res, types, items, allowance, kerf, trim, furnUsed, lowerBound) {
     const off = Math.round(trim / 2);
     const R = $('results');
     const plateArea = res.bins.reduce((s, b) => s + b.type.L * b.type.W, 0);
@@ -676,7 +678,8 @@
     const typeBreak = Object.entries(perType).map(([i, n]) => { const t = types.find(t => t.i == i); return `${n} × ${esc(t.name)} (${fmt(t.L)}×${fmt(t.W)})`; }).join(', ');
 
     let html = `<div class="stats">
-      <div class="stat"><b>${res.bins.length}</b><span>plate${res.bins.length === 1 ? '' : 's'} needed</span></div>
+      <div class="stat"><b>${res.bins.length}</b><span>plate${res.bins.length === 1 ? '' : 's'} needed</span>
+        <em class="minline ${res.bins.length <= lowerBound ? 'at-min' : ''}" title="Smallest number of plates the total piece area could possibly fit on (ignores piece shapes)">Minimum possible: ${lowerBound}${res.bins.length <= lowerBound ? ' ✓' : ''}</em></div>
       <div class="stat"><b>${placedN}/${items.length}</b><span>pieces placed</span></div>
       <div class="stat"><b>${pct}%</b><span>material used</span></div>
       <div class="stat"><b>${((plateArea - usedArea) / 1e8).toFixed(2)}</b><span>m² offcut</span></div>
@@ -717,7 +720,7 @@
     });
     if (res.unplaced.length) { lines.push('NOT PLACED:'); res.unplaced.forEach(it => lines.push(`  ${it.fname} / ${it.name}: ${fmt(it.L)}×${fmt(it.W)}`)); }
     lastText = lines.join('\n');
-    lastRes = { res, types, items, allowance, kerf, trim, furnUsed };
+    lastRes = { res, types, items, allowance, kerf, trim, furnUsed, lowerBound };
 
     R.innerHTML = html;
     $('status').textContent = `${state.mode === 'guillotine' ? 'Straight through-cuts' : 'Tightest fit'} · ${fmt(trim)} cm edge trim · +${fmt(allowance)} cm allowance${kerf ? ` · ${fmt(kerf)} cm kerf` : ''}`;
@@ -901,7 +904,7 @@
     txt(g, `${today()} · ${state.mode === 'guillotine' ? 'Straight through-cuts' : 'Tightest fit'} · edge trim ${fmt(trim)} cm · allowance +${fmt(allowance)} cm on length & width${kerf ? ` · kerf ${fmt(kerf)} cm` : ''}`, MG, MG + 13, { size: 3.1, color: '#7a6f66' });
     const plateArea = res.bins.reduce((s, b) => s + b.type.L * b.type.W, 0);
     const usedArea = res.bins.reduce((s, b) => s + b.placed.reduce((t, p) => t + p.it.L * p.it.W, 0), 0);
-    const stats = [[String(res.bins.length), res.bins.length === 1 ? 'plate needed' : 'plates needed'], [`${items.length - res.unplaced.length}/${items.length}`, 'pieces placed'], [`${plateArea ? Math.round(usedArea / plateArea * 100) : 0}%`, 'material used'], [((plateArea - usedArea) / 1e8).toFixed(2), 'm² offcut']];
+    const stats = [[String(res.bins.length), `${res.bins.length === 1 ? 'plate needed' : 'plates needed'} · minimum possible: ${L.lowerBound}`], [`${items.length - res.unplaced.length}/${items.length}`, 'pieces placed'], [`${plateArea ? Math.round(usedArea / plateArea * 100) : 0}%`, 'material used'], [((plateArea - usedArea) / 1e8).toFixed(2), 'm² offcut']];
     const bw = (CW - 3 * 5) / 4;
     stats.forEach(([v, l], i) => {
       const x = MG + i * (bw + 5), y = MG + 18;
