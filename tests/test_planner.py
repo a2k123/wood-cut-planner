@@ -232,7 +232,7 @@ def test_exports_inside_claude(open_app):
     assert pdf.startswith(b"%PDF")
     assert len(re.findall(rb"/Type /Page(?!s)", pdf)) >= 1 + app.plates_needed()   # summary + one page per plate
     csv = next(v for k, v in files.items() if k.startswith("cut-list")).decode("utf-8-sig")
-    assert csv.splitlines()[0].startswith("Plate,Plate type,Thickness (in),Plate price,Furniture,Piece")
+    assert csv.splitlines()[0].startswith("Plate,Plate type,Thickness (in),Plate price,Furniture,Unit,Piece")
     assert app.errors == []
 
 
@@ -304,3 +304,43 @@ def test_sections_column_in_csv(open_app):
     rows = next(v for k, v in app.saved().items() if k.startswith("cut-list")).decode("utf-8-sig").splitlines()
     assert rows[0].endswith(",Rotated,Section")
     assert all(r.rsplit(",", 1)[1].isdigit() for r in rows[1:])
+
+
+# ---------------------------------------------------------------- keep furniture together
+
+def _plates_per_unit(app):
+    app.page.click("#csvBtn")
+    app.page.wait_for_function("Object.keys(window.__saved).some(k => k.startsWith('cut-list'))")
+    import csv, io
+    rows = list(csv.DictReader(io.StringIO(next(v for k, v in app.saved().items() if k.startswith("cut-list")).decode("utf-8-sig"))))
+    units = {}
+    for r in rows:
+        units.setdefault((r["Furniture"], r["Unit"]), set()).add(r["Plate"])
+    return sorted(len(v) for v in units.values())
+
+
+def test_keep_together_puts_each_unit_on_one_plate(open_app):
+    st = make_state([NIGHTSTAND, BOOKSHELF], plates=[plate(244, 122)], group=True, effort="normal")
+    app = open_app(st, stub=DOWNLOADS_STUB).wait_done()
+    assert app.plates_needed() == 3                                   # grouping never costs extra plates here
+    assert _plates_per_unit(app) == [1, 1, 1]
+    assert "Every unit is on its fewest possible plates" in app.page.inner_text(".units")
+    labels = " ".join(app.page.evaluate("[...document.querySelectorAll('svg.board text')].map(t => t.textContent)"))
+    assert "①" in labels and "②" in labels                            # unit numbers on the nightstand pieces
+
+
+def test_keep_together_on_narrow_boards_with_sections(open_app):
+    st = make_state([NIGHTSTAND_BASE, drawer(2)], plates=[plate(290, 19)], group=True, sections=True, effort="normal")
+    app = open_app(st, stub=DOWNLOADS_STUB).wait_done()
+    assert app.plates_needed() == 6
+    assert max(_plates_per_unit(app)) <= 3                            # each unit needs at least 2 boards; allow one extra
+    for d in _sections(app):                                          # sections rules still hold
+        for r in d["rects"]:
+            for c in d["cuts"]:
+                assert not (r[0] < c - 1 and r[0] + r[2] > c + 1)
+
+
+def test_without_keep_together_layout_still_uses_fewest_plates(open_app):
+    a = open_app(make_state([NIGHTSTAND, BOOKSHELF], effort="normal")).wait_done().plates_needed()
+    b = open_app(make_state([NIGHTSTAND, BOOKSHELF], effort="normal", group=True)).wait_done().plates_needed()
+    assert b == a
