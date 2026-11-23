@@ -68,6 +68,8 @@
   .fio .btn{flex:1;min-width:150px}
   .importbar{margin-top:10px;background:var(--accent-soft);border:1px solid #e2cdb7;border-radius:10px;padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:8px}
   .ib-btns{display:flex;gap:6px;flex-wrap:wrap}
+  .secline{font-size:13px;margin:-2px 0 8px;display:flex;align-items:center;gap:8px;font-family:var(--mono)}
+  .seccut{display:inline-block;width:22px;border-top:2px dotted #111}
   .key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;margin-top:8px;align-items:center}
   .key-h{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
   .key-i{display:inline-flex;align-items:center;gap:5px}
@@ -83,6 +85,8 @@
   .settings{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .settings label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
   .settings .full{grid-column:1/-1}
+  .settings label.check{flex-direction:row;align-items:center;gap:8px;font-size:14px;color:var(--ink);cursor:pointer}
+  .settings label.check input{width:18px;height:18px;accent-color:var(--accent)}
   .hint{font-size:12px;color:var(--muted);margin:8px 0 0}
   .btn{border:0;background:var(--accent);color:#fff;border-radius:8px;padding:8px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
   .btn.ghost{background:none;color:var(--accent);border:1px solid var(--line)}
@@ -180,7 +184,10 @@
             <option value="guillotine">Straight through-cuts only (table / panel saw)</option>
           </select>
         </label>
+        <label class="full check"><input type="checkbox" id="sections"> Cut plates into sections first</label>
+        <label class="full" id="sectionLenWrap">Longest section (cm)<input type="number" id="sectionLen" step="1" min="10" inputmode="decimal"></label>
       </div>
+      <p class="hint"><b>Sections:</b> each plate is first cut across its length into sections no longer than the limit (easier to carry and handle), and every piece stays inside one section. Section cuts show as black dotted lines.</p>
       <p class="hint">"Straight through-cuts" guarantees every cut runs edge to edge across the board, which is what a table saw or panel saw needs. It can use slightly more material.</p>
       <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn ghost" id="resetBtn">Load example</button>
@@ -211,7 +218,7 @@
 (() => {
   // ---------- state ----------
   const EXAMPLE = {
-    allowance: 2, trim: 2, kerf: 0, mode: 'free', effort: 'normal', currency: '₪',
+    allowance: 2, trim: 2, kerf: 0, mode: 'free', effort: 'normal', currency: '₪', sections: false, sectionLen: 100,
     plates: [{ name: 'Plywood 3/4"', L: 244, W: 122, T: '3/4', qty: '', P: '' }],
     furniture: [
       { name: 'Nightstand', qty: 2, open: true, pieces: [
@@ -243,6 +250,8 @@
   if (state.trim === undefined) state.trim = 2;
   if (!state.effort) state.effort = 'normal';
   if (state.currency === undefined) state.currency = '₪';
+  if (state.sections === undefined) state.sections = false;
+  if (state.sectionLen === undefined) state.sectionLen = 100;
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 
   // ---------- colors: one hue per furniture, shades per piece ----------
@@ -310,6 +319,9 @@
     $('mode').value = state.mode;
     $('effort').value = state.effort;
     $('currency').value = state.currency;
+    $('sections').checked = !!state.sections;
+    $('sectionLen').value = state.sectionLen;
+    $('sectionLenWrap').hidden = !state.sections;
   }
 
   // plates
@@ -368,7 +380,8 @@
     state.furniture.push({ name: '', qty: 1, open: true, pieces: [newPiece()] }); renderInputs();
     const fs = F.querySelectorAll('.furn'); fs[fs.length - 1].querySelector('.fname').focus();
   };
-  ['allowance', 'trim', 'kerf', 'mode', 'effort', 'currency'].forEach(id => $(id).addEventListener('input', e => { state[id] = e.target.value; changed(); }));
+  ['allowance', 'trim', 'kerf', 'mode', 'effort', 'currency', 'sectionLen'].forEach(id => $(id).addEventListener('input', e => { state[id] = e.target.value; changed(); }));
+  $('sections').addEventListener('change', e => { state.sections = e.target.checked; $('sectionLenWrap').hidden = !state.sections; changed(true); });
   $('resetBtn').onclick = () => { state = JSON.parse(JSON.stringify(EXAMPLE)); renderInputs(); changed(true); };
   $('clearBtn').onclick = () => { state.furniture = [{ name: '', qty: 1, open: true, pieces: [newPiece()] }]; renderInputs(); changed(true); };
 
@@ -484,7 +497,37 @@
     }
   }
 
+  // Sections mode: pack pieces into "section" bins no longer than the limit, shrink each section to the
+  // length it actually uses, then line the sections up along the plates (first-fit or best-fit, longest first).
+  // Every piece stays inside one section, and each section cut runs straight across the plate.
+  function packSections(items, types, P) {
+    const secTypes = types.map(t => ({ ...t, uL: Math.min(t.uL, P.sectionLen), qty: Infinity, parent: t }));
+    const inner = pack(items, secTypes, { ...P, sectionLen: 0, preopen: 0 });
+    const secs = inner.bins.map(b => ({ b, used: b.placed.reduce((m, p) => Math.max(m, p.x + p.w), 0), t: b.type.parent }));
+    secs.sort((a, c) => c.used - a.used);
+    const plates = [], left = types.map(t => t.qty), unplaced = inner.unplaced.slice();
+    for (const sc of secs) {
+      let target = null;
+      for (const pl of plates) {
+        if (pl.type !== sc.t || pl.free < sc.used) continue;
+        if (P.binMode === 'first') { target = pl; break; }
+        if (!target || pl.free < target.free) target = pl;
+      }
+      if (!target) {
+        const ti = types.indexOf(sc.t);
+        if (left[ti] > 0) { left[ti]--; target = { ...newBin(sc.t, P), free: sc.t.uL + P.kerf, sections: [] }; plates.push(target); }
+      }
+      if (!target) { for (const p of sc.b.placed) unplaced.push(p.it); continue; }
+      const x0 = target.W - target.free, si = target.sections.length;
+      target.sections.push({ x: x0, len: sc.used });
+      for (const p of sc.b.placed) target.placed.push({ ...p, x: p.x + x0, sec: si });
+      target.free -= sc.used;
+    }
+    return { bins: plates, unplaced };
+  }
+
   function pack(items, types, P) {
+    if (P.sectionLen) return packSections(items, types, P);
     const bins = [], left = types.map(t => t.qty), unplaced = [];
     // "preopen": open a fixed set of plates up front and spread pieces across all of them
     if (P.preopen) {
@@ -616,9 +659,10 @@
 
   // smallest number of plates whose usable area could hold all pieces, using the biggest plates first
   // and respecting how many of each plate you have (ignores shapes, so it is a floor, not a promise)
-  function minPlates(items, types, kerf = 0) {
+  function minPlates(items, types, kerf = 0, sectionLen = 0) {
     // pieces that fit no plate at all are reported separately and must not inflate the minimum
-    items = items.filter(it => types.some(t => (it.pw <= t.uL + kerf && it.ph <= t.uW + kerf) || (it.rot && it.ph <= t.uL + kerf && it.pw <= t.uW + kerf)));
+    const lenOf = t => (sectionLen ? Math.min(t.uL, sectionLen) : t.uL) + kerf;
+    items = items.filter(it => types.some(t => (it.pw <= lenOf(t) && it.ph <= t.uW + kerf) || (it.rot && it.ph <= lenOf(t) && it.pw <= t.uW + kerf)));
     if (!items.length) return 1;
     let need = items.reduce((s, it) => s + it.pw * it.ph, 0), n = 0;
     const sorted = types.slice().sort((a, b) => b.uL * b.uW - a.uL * a.uW);
@@ -653,13 +697,13 @@
     for (const binMode of ['first', 'best']) {
       if (opts.mode === 'guillotine') {
         for (const heur of ['BAF', 'BSSF', 'BLSF']) for (const split of ['SLAS', 'LLAS', 'MAXAS', 'MINAS'])
-          configs.push({ algo: 'guillotine', heur, split, binMode, kerf: opts.kerf });
+          configs.push({ algo: 'guillotine', heur, split, binMode, kerf: opts.kerf, sectionLen: opts.sectionLen });
       } else {
         for (const heur of ['BSSF', 'BLSF', 'BAF', 'BL', 'CP'])
-          configs.push({ algo: 'maxrects', heur, binMode, kerf: opts.kerf });
+          configs.push({ algo: 'maxrects', heur, binMode, kerf: opts.kerf, sectionLen: opts.sectionLen });
         // straight-cut layouts are valid here too and sometimes win
         for (const heur of ['BAF', 'BSSF']) for (const split of ['SLAS', 'MAXAS'])
-          configs.push({ algo: 'guillotine', heur, split, binMode, kerf: opts.kerf });
+          configs.push({ algo: 'guillotine', heur, split, binMode, kerf: opts.kerf, sectionLen: opts.sectionLen });
       }
     }
     const bestModeConfigs = configs.filter(c => c.binMode === 'best');
@@ -673,7 +717,7 @@
     };
 
     // lower bound on plates (area only), used to stop early
-    const lowerBound = minPlates(items, types, opts.kerf);
+    const lowerBound = minPlates(items, types, opts.kerf, opts.sectionLen);
 
     // phase 1 — quick deterministic pass
     if (seed && seed.order) tryRun(seed.order, seed.P);
@@ -701,7 +745,7 @@
       const sliceEnd = performance.now() + 30;
       let improved = false;
       while (performance.now() < sliceEnd) {
-        const atBound = best.bins.length <= lowerBound;
+        const atBound = best.bins.length <= lowerBound || !!opts.sectionLen;   // fixed-plate attempts don't apply to sections
         const r = Math.random();
         if (!atBound && r < 0.35) {
           // try to fit everything on one plate fewer
@@ -775,6 +819,15 @@
   }
   const fmtVol = v => v < 1 ? v.toFixed(3) : v.toFixed(2);
 
+  // lengths of the sections on a plate (real cut lengths, cm) and what is left at the end
+  function sectionInfo(b, kerf) {
+    if (!b.sections || !b.sections.length) return null;
+    const lens = b.sections.map(sc => sc.len - kerf);
+    const end = b.sections.reduce((m, sc) => Math.max(m, sc.x + sc.len), 0);
+    return { lens, rest: Math.max(0, b.type.uL - end) };
+  }
+  const sectionText = si => `${si.lens.length} section${si.lens.length === 1 ? '' : 's'}: ${si.lens.map(l => fmt(l)).join(' + ')} cm${si.rest > 0 ? ` (rest ${fmt(si.rest)} cm)` : ''}`;
+
   // ---------- compute & render ----------
   let lastText = '';
   function compute() {
@@ -810,8 +863,9 @@
     if (!items.length) { R.innerHTML = `<div class="card empty">Add furniture with pieces (and a Build quantity above 0) to see the layout.</div>`; $('status').textContent = ''; lastText = ''; lastRes = null; return; }
     if (items.length > 2000) { R.innerHTML = `<div class="card empty">That's ${items.length} pieces — please keep it under 2000.</div>`; return; }
 
-    solve(items, types, { mode: state.mode, kerf, effort: state.effort }, function onUpdate(res, info) {
-      if (res) render(res, types, items, allowance, kerf, trim, furnUsed, info.lowerBound);
+    const sectionLen = state.sections && num(state.sectionLen) > 0 ? U(num(state.sectionLen)) : 0;
+    solve(items, types, { mode: state.mode, kerf, effort: state.effort, sectionLen }, function onUpdate(res, info) {
+      if (res) render(res, types, items, allowance, kerf, trim, furnUsed, info.lowerBound, sectionLen);
       const st = $('search');
       if (info.done) {
         const atMin = res && !res.unplaced.length && res.bins.length <= info.lowerBound;
@@ -825,7 +879,7 @@
     });
   }
 
-  function render(res, types, items, allowance, kerf, trim, furnUsed, lowerBound) {
+  function render(res, types, items, allowance, kerf, trim, furnUsed, lowerBound, sectionLen = 0) {
     const off = Math.round(trim / 2);
     const R = $('results');
     const plateArea = res.bins.reduce((s, b) => s + b.type.L * b.type.W, 0);
@@ -852,13 +906,15 @@
     if (res.unplaced.length) {
       const groups = {};
       for (const it of res.unplaced) {
-        const fits = types.some(t => (it.L <= t.uL && it.W <= t.uW) || (it.rot && it.W <= t.uL && it.L <= t.uW));
+        const fitsIn = (l, w) => types.some(t => (it.L <= l(t) && it.W <= w(t)) || (it.rot && it.W <= l(t) && it.L <= w(t)));
+        const fits = fitsIn(t => sectionLen ? Math.min(t.uL, sectionLen) : t.uL, t => t.uW);
+        const tooLongForSection = sectionLen && !fits && fitsIn(t => t.uL, t => t.uW);
         const key = it.key;
-        groups[key] = groups[key] || { it, n: 0, fits };
+        groups[key] = groups[key] || { it, n: 0, fits, tooLong: tooLongForSection };
         groups[key].n++;
       }
       html += `<div class="warn"><b>${res.unplaced.length} piece${res.unplaced.length === 1 ? '' : 's'} could not be placed:</b><ul>` +
-        Object.values(groups).map(g => `<li>${g.n} × ${esc(g.it.fname)} – ${esc(g.it.name)} (${fmt(g.it.L)}×${fmt(g.it.W)} with allowance) — ${g.fits ? 'ran out of plates (raise the plate quantity)' : (!g.it.rot && types.some(t => g.it.W <= t.uL && g.it.L <= t.uW) ? 'only fits rotated; tick Rot to allow it' : 'larger than every plate after edge trim')}</li>`).join('') + `</ul></div>`;
+        Object.values(groups).map(g => `<li>${g.n} × ${esc(g.it.fname)} – ${esc(g.it.name)} (${fmt(g.it.L)}×${fmt(g.it.W)} with allowance) — ${g.tooLong ? `longer than the ${fmt(sectionLen)} cm section limit (raise it or turn sections off)` : g.fits ? 'ran out of plates (raise the plate quantity)' : (!g.it.rot && types.some(t => g.it.W <= t.uL && g.it.L <= t.uW) ? 'only fits rotated; tick Rot to allow it' : 'larger than every plate after edge trim')}</li>`).join('') + `</ul></div>`;
     }
 
     html += `<div class="legend">
@@ -873,29 +929,39 @@
       const used = b.placed.reduce((s, p) => s + p.it.L * p.it.W, 0);
       const u = Math.round(used / (b.type.L * b.type.W) * 100);
       html += `<div class="sheet"><div class="sheet-head"><h3>Plate ${bi + 1} · ${esc(b.type.name)}</h3><span class="meta">${fmt(b.type.L)} × ${fmt(b.type.W)} cm${b.type.T ? ` · ${esc(b.type.Tlabel)}″` : ''} (usable ${fmt(b.type.uL)} × ${fmt(b.type.uW)}) · ${b.placed.length} pcs · ${u}% used${isFinite(plateCost(b.type)) ? ` · ${esc(money(plateCost(b.type)))}` : ''}</span></div>`;
-      html += boardSVG(b, bi, off, allowance) + keyHTML(b);
+      const si = sectionInfo(b, kerf);
+      if (si) html += `<div class="secline"><i class="seccut"></i>Cut first into ${sectionText(si)}</div>`;
+      html += boardSVG(b, bi, off, allowance, kerf) + keyHTML(b);
       const sorted = b.placed.slice().sort((a, c) => a.it.fi - c.it.fi || a.it.pi - c.it.pi || a.it.k - c.it.k);
       html += `<details><summary>Piece list for plate ${bi + 1}</summary><table><thead><tr><th>Furniture</th><th>Piece</th><th>Piece size</th><th>Cut size (+allowance)</th><th>Position (x, y)</th><th></th></tr></thead><tbody>` +
         sorted.map(p => `<tr><td>${esc(p.it.fname)}</td><td><span class="swatch" style="background:${p.it.fill};border:1px solid ${p.it.sc}"></span>${esc(p.it.name)}${p.it.q > 1 ? ` <span style="color:var(--muted)">#${p.it.k}</span>` : ''}</td><td class="num">${fmt(p.it.origL)}×${fmt(p.it.origW)}</td><td class="num">${fmt(p.it.L)}×${fmt(p.it.W)}</td><td class="num">${fmt(p.x + off)}, ${fmt(p.y + off)}</td><td>${p.r ? '↻ rotated' : ''}</td></tr>`).join('') +
         `</tbody></table></details></div>`;
+      const siT = sectionInfo(b, kerf);
       lines.push(`Plate ${bi + 1} — ${b.type.name} ${fmt(b.type.L)}×${fmt(b.type.W)}, usable ${fmt(b.type.uL)}×${fmt(b.type.uW)} (${u}% used)`);
+      if (siT) lines.push(`  Cut first into ${sectionText(siT)}`);
       sorted.forEach(p => lines.push(`  ${p.it.fname} / ${p.it.name}${p.it.q > 1 ? ' #' + p.it.k : ''}: ${fmt(p.it.origL)}×${fmt(p.it.origW)} → cut ${fmt(p.it.L)}×${fmt(p.it.W)} at (${fmt(p.x + off)}, ${fmt(p.y + off)})${p.r ? ' rotated' : ''}`));
       lines.push('');
     });
     if (res.unplaced.length) { lines.push('NOT PLACED:'); res.unplaced.forEach(it => lines.push(`  ${it.fname} / ${it.name}: ${fmt(it.L)}×${fmt(it.W)}`)); }
     lastText = lines.join('\n');
-    lastRes = { res, types, items, allowance, kerf, trim, furnUsed, lowerBound };
+    lastRes = { res, types, items, allowance, kerf, trim, furnUsed, lowerBound, sectionLen };
 
     R.innerHTML = html;
-    $('status').textContent = `${state.mode === 'guillotine' ? 'Straight through-cuts' : 'Tightest fit'} · ${fmt(trim)} cm edge trim · +${fmt(allowance)} cm allowance${kerf ? ` · ${fmt(kerf)} cm kerf` : ''}`;
+    $('status').textContent = `${state.mode === 'guillotine' ? 'Straight through-cuts' : 'Tightest fit'}${sectionLen ? ` · sections ≤ ${fmt(sectionLen)} cm` : ''} · ${fmt(trim)} cm edge trim · +${fmt(allowance)} cm allowance${kerf ? ` · ${fmt(kerf)} cm kerf` : ''}`;
     $('copybox').style.display = 'none';
   }
 
-  function boardSVG(b, bi, off, allowance) {
+  // drawing area around a plate: room for dimensions, plus a strip below for section labels
+  function boardBox(b) {
+    const L = b.type.L, W = b.type.W, M = Math.max(L, W), pad = M * 0.045;
+    const extra = b.sections && b.sections.length ? pad * 0.75 : 0;
+    return { pad, x: -pad, y: -pad, w: L + pad * 1.4, h: W + pad * 1.4 + extra };
+  }
+  function boardSVG(b, bi, off, allowance, kerf = 0) {
     const L = b.type.L, W = b.type.W, M = Math.max(L, W);
     const key = [], keyMap = new Map(), tags = [], labelCap = M * 0.03;
-    const pad = M * 0.045;
-    const vb = `${-pad} ${-pad} ${L + pad * 1.4} ${W + pad * 1.4}`;
+    const box = boardBox(b), pad = box.pad;
+    const vb = `${box.x} ${box.y} ${box.w} ${box.h}`;
     const dimFs = M * 0.022;
     const hs = M * 0.006; // hatch spacing
     let s = `<svg class="board" viewBox="${vb}" xmlns="http://www.w3.org/2000/svg"><defs>`;
@@ -971,6 +1037,18 @@
       const tf = Math.max(Math.min(t.small * 0.62, labelCap), M * 0.0145), r = tf * 0.78;
       s += `<g><circle cx="${t.cx}" cy="${t.cy}" r="${r}" fill="#fff" stroke="${t.sc}" stroke-width="${M * 0.0018}"/>`;
       s += `<text x="${t.cx}" y="${t.cy}" dominant-baseline="central" text-anchor="middle" font-size="${tf}" font-weight="700">${t.letter}</text></g>`;
+    }
+    // section cuts: black dotted lines running past both edges of the plate, labelled underneath
+    if (b.sections && b.sections.length) {
+      const over = pad * 0.5, dash = M * 0.006;
+      const cutsAt = [];
+      b.sections.forEach((sc, i) => { const end = off + sc.x + sc.len - kerf / 2; if (end < off + b.type.uL - 1) cutsAt.push(end); });
+      for (const x of cutsAt) s += `<line x1="${x}" y1="${-over}" x2="${x}" y2="${W + over}" stroke="#111" stroke-width="${M * 0.003}" stroke-dasharray="${dash * 0.25} ${dash}" stroke-linecap="round"/>`;
+      const fsS = Math.min(M * 0.02, pad * 0.5);
+      b.sections.forEach((sc, i) => {
+        const cx = off + sc.x + (sc.len - kerf) / 2;
+        s += `<text x="${cx}" y="${W + over + fsS * 1.1}" text-anchor="middle" font-size="${fsS}" font-weight="600" fill="#111">${i + 1} · ${fmt(sc.len - kerf)} cm</text>`;
+      });
     }
     s += `</svg>`;
     b._key = key;
@@ -1108,11 +1186,12 @@
       txt(g, `Plate ${bi + 1} of ${res.bins.length} · ${b.type.name}`, MG, MG + 6, { size: 5.4, weight: 700 });
       txt(g, `${fmt(b.type.L)} × ${fmt(b.type.W)} cm (usable ${fmt(b.type.uL)} × ${fmt(b.type.uW)}) · ${b.placed.length} pieces · ${u}% used`, PW - MG, MG + 6, { size: 3.1, color: '#7a6f66', align: 'right' });
       legend(g, MG, MG + 12, allowance, trim);
-      const M = Math.max(b.type.L, b.type.W), pad = M * 0.045;
-      const vw = b.type.L + pad * 1.4, vh = b.type.W + pad * 1.4;
+      const siP = sectionInfo(b, kerf);
+      if (siP) txt(g, `Cut first into ${sectionText(siP)}  (black dotted lines)`, PW - MG, MG + 12, { size: 3, weight: 600, align: 'right' });
+      const bx = boardBox(b), vw = bx.w, vh = bx.h;
       const maxH = 112, top = MG + 16;
       const sc = Math.min(CW / vw, maxH / vh), iw = vw * sc, ih = vh * sc;
-      const img = await svgImage(boardSVG(b, 'p' + bi, off, allowance), iw, ih);
+      const img = await svgImage(boardSVG(b, 'p' + bi, off, allowance, kerf), iw, ih);
       g.drawImage(img, MG + (CW - iw) / 2, top, iw, ih);
       st.y = top + ih + 5;
       if (b._key.length) {
@@ -1161,9 +1240,9 @@
   function buildCSV() {
     const { res, trim } = lastRes; const off = Math.round(trim / 2);
     const q = v => { v = String(v ?? ''); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    const out = [['Plate', 'Plate type', 'Thickness (in)', 'Plate price', 'Furniture', 'Piece', 'Number', 'Piece length (cm)', 'Piece width (cm)', 'Cut length (cm)', 'Cut width (cm)', 'X (cm)', 'Y (cm)', 'Rotated']];
-    res.bins.forEach((b, bi) => b.placed.slice().sort((a, c) => a.it.fi - c.it.fi || a.it.pi - c.it.pi || a.it.k - c.it.k).forEach(p => out.push([bi + 1, b.type.name, b.type.Tlabel || '', isFinite(plateCost(b.type)) ? plateCost(b.type).toFixed(2) : '', p.it.fname, p.it.name, p.it.k, fmt(p.it.origL), fmt(p.it.origW), fmt(p.it.L), fmt(p.it.W), fmt(p.x + off), fmt(p.y + off), p.r ? 'yes' : 'no'])));
-    res.unplaced.forEach(it => out.push(['NOT PLACED', '', '', '', it.fname, it.name, it.k, fmt(it.origL), fmt(it.origW), fmt(it.L), fmt(it.W), '', '', '']));
+    const out = [['Plate', 'Plate type', 'Thickness (in)', 'Plate price', 'Furniture', 'Piece', 'Number', 'Piece length (cm)', 'Piece width (cm)', 'Cut length (cm)', 'Cut width (cm)', 'X (cm)', 'Y (cm)', 'Rotated', 'Section']];
+    res.bins.forEach((b, bi) => b.placed.slice().sort((a, c) => a.it.fi - c.it.fi || a.it.pi - c.it.pi || a.it.k - c.it.k).forEach(p => out.push([bi + 1, b.type.name, b.type.Tlabel || '', isFinite(plateCost(b.type)) ? plateCost(b.type).toFixed(2) : '', p.it.fname, p.it.name, p.it.k, fmt(p.it.origL), fmt(p.it.origW), fmt(p.it.L), fmt(p.it.W), fmt(p.x + off), fmt(p.y + off), p.r ? 'yes' : 'no', p.sec !== undefined ? p.sec + 1 : ''])));
+    res.unplaced.forEach(it => out.push(['NOT PLACED', '', '', '', it.fname, it.name, it.k, fmt(it.origL), fmt(it.origW), fmt(it.L), fmt(it.W), '', '', '', '']));
     return '﻿' + out.map(r => r.map(q).join(',')).join('\r\n');
   }
 

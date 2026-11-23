@@ -259,3 +259,48 @@ def test_exports_as_standalone_website_download_files(open_app):
 def test_phone_layout_has_no_horizontal_scroll(open_app):
     app = open_app(make_state([NIGHTSTAND, BOOKSHELF], plates=[plate(244, 122, T="3/4", P="4500")]), viewport=(390, 800)).wait_done()
     assert not app.page.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+
+
+# ---------------------------------------------------------------- sections mode
+
+def _sections(app):
+    return app.page.evaluate("""() => [...document.querySelectorAll('svg.board')].map(s => ({
+        rects: [...s.querySelectorAll('g rect[stroke-dasharray]')].map(r => ['x','y','width','height'].map(a => +r.getAttribute(a))),
+        cuts: [...s.querySelectorAll('line')].map(l => +l.getAttribute('x1')) }))""")
+
+
+def test_sections_keep_every_piece_inside_one_section(open_app):
+    st = make_state([NIGHTSTAND_BASE, drawer(1)], plates=[plate(290, 19)], sections=True, sectionLen=100, effort="normal")
+    app = open_app(st).wait_done()
+    assert app.plates_needed() == 5                                   # same as without sections for these boards
+    for d in _sections(app):
+        for r in d["rects"]:
+            for c in d["cuts"]:
+                assert not (r[0] < c - 1 and r[0] + r[2] > c + 1), "a piece crosses a section cut"
+    for line in app.page.locator(".secline").all_inner_texts():
+        lens = [float(x) for x in re.search(r": ([\d. +]+) cm", line).group(1).split(" + ")]
+        assert all(l <= 100 for l in lens)
+
+
+def test_section_cut_lines_run_past_the_plate_edges(open_app):
+    app = open_app(make_state([NIGHTSTAND_BASE, drawer(1)], plates=[plate(290, 19)], sections=True, sectionLen=100)).wait_done()
+    ys = app.page.evaluate("[...document.querySelectorAll('svg.board line')].map(l => [+l.getAttribute('y1'), +l.getAttribute('y2'), l.getAttribute('stroke')])")
+    assert ys and all(y1 < 0 and y2 > 1900 and stroke == "#111" for y1, y2, stroke in ys)   # plate width is 19 cm = 1900 units
+
+
+def test_piece_longer_than_section_is_reported(open_app):
+    st = make_state([BOOKSHELF], plates=[plate(244, 122)], sections=True, sectionLen=100)
+    app = open_app(st).wait_done()
+    assert "longer than the 100 cm section limit" in app.page.inner_text(".warn")
+    lo = int(re.search(r"\d+", app.min_line()).group())
+    assert lo <= app.plates_needed()                                   # the long sides don't inflate the minimum
+
+
+def test_sections_column_in_csv(open_app):
+    st = make_state([NIGHTSTAND], plates=[plate(244, 122)], sections=True, sectionLen=100)
+    app = open_app(st, stub=DOWNLOADS_STUB).wait_done()
+    app.page.click("#csvBtn")
+    app.page.wait_for_function("Object.keys(window.__saved).some(k => k.startsWith('cut-list'))")
+    rows = next(v for k, v in app.saved().items() if k.startswith("cut-list")).decode("utf-8-sig").splitlines()
+    assert rows[0].endswith(",Rotated,Section")
+    assert all(r.rsplit(",", 1)[1].isdigit() for r in rows[1:])

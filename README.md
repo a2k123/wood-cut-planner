@@ -30,6 +30,7 @@
 - **Two layout styles:**
   - **Tightest fit:** any arrangement that saves the most material.
   - **Straight through-cuts only:** every cut runs edge to edge, which is what a table saw or panel saw needs.
+- **Cut plates into sections first:** optional. Each plate is first cut across its length into sections no longer than a limit you set (1 m by default), so long boards are easier to carry and handle. Every piece stays inside one section. The sketch marks the section cuts with **black dotted lines that run past the plate's edges** and labels each section's length. If a piece is longer than the limit, you're told so.
 - **Background search:** the planner keeps looking for a better layout without freezing the page, and redraws whenever it finds one. Choose **Quick** (under half a second), **Normal** (up to 3 seconds) or **Thorough** (up to 10 seconds).
 - **Live progress:** a status line shows the search time and the number of layouts tried.
 - **Search 10 s more:** a button that appears when the minimum wasn't reached.
@@ -46,7 +47,7 @@
 | Button | What you get |
 |---|---|
 | **Export PDF** | An A4 landscape cut plan. Page 1 has a summary with all the totals and a full parts list. Then there is one page per plate with its sketch, letter key and pieces. |
-| **Export CSV** | One row per piece: plate, thickness, plate price, furniture, piece, real size, cut size, position, rotation. It opens in Excel and Google Sheets. |
+| **Export CSV** | One row per piece: plate, thickness, plate price, furniture, piece, real size, cut size, position, rotation, section. It opens in Excel and Google Sheets. |
 | **Copy text** | A plain-text cut list for pasting into a message. |
 | **Save furniture as CSV** | Your furniture designs, so you can keep your work or share it. |
 | **Import furniture CSV** | Load saved designs, replacing what you have or adding to it. |
@@ -102,6 +103,7 @@ Browser tests in `tests/` open the page in headless Chromium and check:
 - the allowance and edge trim are applied, and grain-locked pieces never rotate
 - every piece gets a label or a letter, and unticked pieces are left out
 - straight-cut mode really produces edge-to-edge cuts, including on many random sets
+- in sections mode, no piece crosses a section cut, sections respect the length limit, and the cut lines run past the plate's edges
 - the minimum is correct for narrow boards and respects plate quantities
 - the area, volume and price totals are right, and inch fractions are read correctly
 - furniture CSV round-trips, and imports with Hebrew headers, semicolons and decimal commas work
