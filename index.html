@@ -189,11 +189,11 @@
             <option value="guillotine">Straight through-cuts only (table / panel saw)</option>
           </select>
         </label>
-        <label class="full check"><input type="checkbox" id="group"> Keep furniture together (especially each unit)</label>
+        <label class="full check"><input type="checkbox" id="group"> Keep each unit together</label>
         <label class="full check"><input type="checkbox" id="sections"> Cut plates into sections first</label>
         <label class="full" id="sectionLenWrap">Longest section (cm)<input type="number" id="sectionLen" step="1" min="10" inputmode="decimal"></label>
       </div>
-      <p class="hint"><b>Keep together:</b> among layouts with the fewest plates, prefers the one where each unit's pieces (e.g. nightstand ②) share a plate and sit close together, and each furniture uses as few plates as possible.</p>
+      <p class="hint"><b>Keep each unit together:</b> among layouts with the fewest plates, prefers the one where all the pieces of each unit (e.g. nightstand ②) share a plate and sit close together. Different units can share a plate when that helps.</p>
       <p class="hint"><b>Sections:</b> each plate is first cut across its length into sections no longer than the limit (easier to carry and handle), and every piece stays inside one section. Section cuts show as black dotted lines.</p>
       <p class="hint">"Straight through-cuts" guarantees every cut runs edge to edge across the board, which is what a table saw or panel saw needs. It can use slightly more material.</p>
       <div style="display:flex;gap:8px;margin-top:12px">
@@ -574,8 +574,8 @@
     return { bins: out, unplaced };
   }
 
-  // How scattered the furniture is: each unit spread over several plates costs a lot, over several
-  // sections less, a unit's pieces spread out on a plate a little; furniture over several plates a bit.
+  // How scattered each unit is: a unit spread over several plates costs a lot, over several sections
+  // less, and a unit's pieces spread out on a plate a little. Different units may share a plate freely.
   // Identical pieces are interchangeable between units (one nightstand's side is as good as another's),
   // so give unit numbers by position: copies of each piece in plate/section/left-to-right order fill unit 1,
   // then unit 2, ... Every piece type follows the same order, so each unit's pieces line up together.
@@ -593,7 +593,7 @@
   const unitOf = p => p.u ?? p.it.u;
 
   function groupPenalty(res) {
-    const inst = new Map(), furn = new Map();
+    const inst = new Map();
     res.bins.forEach((b, bi) => b.placed.forEach(p => {
       const ik = p.it.fi + ':' + unitOf(p);
       let e = inst.get(ik);
@@ -603,7 +603,6 @@
       let bb = e.box.get(bi);
       if (!bb) e.box.set(bi, bb = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity, a: 0 });
       bb.x0 = Math.min(bb.x0, p.x); bb.y0 = Math.min(bb.y0, p.y); bb.x1 = Math.max(bb.x1, p.x + p.w); bb.y1 = Math.max(bb.y1, p.y + p.h); bb.a += p.w * p.h;
-      let f = furn.get(p.it.fi); if (!f) furn.set(p.it.fi, f = new Set()); f.add(bi);
     }));
     let pen = 0;
     for (const e of inst.values()) {
@@ -611,7 +610,6 @@
       if (e.secs.size) pen += (e.secs.size - e.plates.size) * 100;
       for (const bb of e.box.values()) pen += Math.min(10, (bb.x1 - bb.x0) * (bb.y1 - bb.y0) / bb.a - 1);
     }
-    for (const f of furn.values()) pen += (f.size - 1) * 30;
     return Math.round(pen * 100) / 100;
   }
 
@@ -1043,7 +1041,7 @@
     lastRes = { res, types, items, allowance, kerf, trim, furnUsed, lowerBound, sectionLen };
 
     R.innerHTML = html;
-    $('status').textContent = `${state.mode === 'guillotine' ? 'Straight through-cuts' : 'Tightest fit'}${state.group ? ' · keeping furniture together' : ''}${sectionLen ? ` · sections ≤ ${fmt(sectionLen)} cm` : ''} · ${fmt(trim)} cm edge trim · +${fmt(allowance)} cm allowance${kerf ? ` · ${fmt(kerf)} cm kerf` : ''}`;
+    $('status').textContent = `${state.mode === 'guillotine' ? 'Straight through-cuts' : 'Tightest fit'}${state.group ? ' · keeping each unit together' : ''}${sectionLen ? ` · sections ≤ ${fmt(sectionLen)} cm` : ''} · ${fmt(trim)} cm edge trim · +${fmt(allowance)} cm allowance${kerf ? ` · ${fmt(kerf)} cm kerf` : ''}`;
     $('copybox').style.display = 'none';
   }
 
